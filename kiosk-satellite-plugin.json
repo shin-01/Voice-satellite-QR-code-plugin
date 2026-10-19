@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "id": "voice-satellite-qrcode",
+  "name": "QR Code",
+  "version": "1.0.0",
+  "minAndroidSdk": 24,
+  "entryClass": "example.kiosk.QrPlugin",
+  "description": "A corner widget that opens the chosen QR code full screen on tap, handy for sharing this kiosk's Wi-Fi credentials with a phone.",
+  "author": "shin-01",
+  "license": "Apache-2.0 AND MIT",
+  "capabilities": ["overlay"],
+  "settings": [
+    {
+      "key": "showWidget",
+      "type": "boolean",
+      "title": "Show corner widget",
+      "default": true,
+      "group": "QR code",
+      "description": "Keep the tappable widget in a display corner."
+    },
+    {
+      "key": "title",
+      "type": "string",
+      "title": "Widget title",
+      "default": "Wi-Fi",
+      "group": "QR code",
+      "description": "The label on the corner widget and the heading of the QR card."
+    },
+    {
+      "key": "content",
+      "type": "string",
+      "title": "QR content",
+      "default": "",
+      "group": "QR code",
+      "description": "What the QR encodes: a WIFI: string, a URL or any text. Example: WIFI:T:WPA;S:MyNetwork;P:MyPassword;;"
+    },
+    {
+      "key": "corner",
+      "type": "select",
+      "title": "Corner",
+      "default": "Top right",
+      "options": ["Top left", "Top right", "Bottom left", "Bottom right"],
+      "group": "QR code",
+      "description": "Where the widget sits."
+    },
+    {
+      "key": "icon",
+      "type": "icon",
+      "title": "Widget icon",
+      "default": "mdi:qrcode",
+      "group": "QR code",
+      "description": "The icon on the corner widget."
+    },
+    {
+      "key": "qrSize",
+      "type": "number",
+      "title": "QR size",
+      "default": 320,
+      "min": 160,
+      "max": 480,
+      "step": 20,
+      "unit": "dp",
+      "group": "QR code",
+      "description": "The size of the QR code in the full screen card."
+    }
+  ],
+  "commands": [
+    { "id": "showQr", "title": "Show QR code" }
+  ]
+}
