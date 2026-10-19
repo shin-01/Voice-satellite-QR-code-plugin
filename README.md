@@ -1,40 +1,48 @@
-# QR Code (Kiosk Satellite example plugin)
+# QR Code (Kiosk Satellite plugin)
 
 A small corner widget that opens the chosen QR code full screen when tapped.
-Handy for sharing this kiosk's Wi-Fi credentials with a phone: point the
-camera at the code and join the network.
+The QR encodes a URL, plain text or this kiosk's Wi-Fi credentials — whatever
+a phone needs to scan.
 
 ## What it does
 
 - A themed pill widget sits in the display corner you choose, with an icon and
   title of your picking.
-- Tapping the widget (or running the **Show QR code** action from a gesture,
-  the kiosk drawer or a Home Assistant button) opens a full screen card with
-  the QR code.
+- Tapping the widget opens a full screen card with the QR code.
+- The **Show QR code** action does the same from anywhere: assign it in
+  **Gestures > Run a plugin action**, keep it in the kiosk drawer or expose it
+  as a Home Assistant button from the plugin subpage.
 - The card closes on a tap outside, on the **Close** button or with Back.
-- The QR content is free text: a `WIFI:` string, a URL or anything else.
 
 ## Settings
+
+### QR code
 
 | Setting | Meaning |
 | --- | --- |
 | Show corner widget | Turn the corner widget on or off |
 | Widget title | The label on the widget and the heading of the QR card |
-| QR content | What the QR encodes, for example `WIFI:T:WPA;S:MyNetwork;P:MyPassword;;` |
 | Corner | Where the widget sits |
 | Widget icon | A Material Design Icon for the widget |
 | QR size | The size of the QR code in the full screen card, 160 to 480 dp |
 
-## Wi-Fi format
+### QR content
 
-Android and iOS both read the standard Wi-Fi QR format:
+| Setting | Meaning |
+| --- | --- |
+| QR content type | `Wi-Fi`, `URL` or `Text` |
+| Network name (SSID), Security, Password | Shown for `Wi-Fi`. The password is masked |
+| URL | Shown for `URL`, for example `https://www.kiosksatellite.com/` |
+| Text | Shown for `Text`, any text |
+
+For Wi-Fi the plugin builds the standard join string that Android and iOS
+cameras read, escaping special characters for you:
 
 ```
 WIFI:T:WPA;S:MyNetwork;P:MyPassword;;
 ```
 
-Use `T:nopass` for an open network and omit `P:`. Escape special characters
-in the SSID or password with a backslash.
+Open networks use `T:nopass` and carry no password.
 
 ## Where data goes
 

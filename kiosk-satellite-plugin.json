@@ -6,7 +6,7 @@
   "version": "1.0.0",
   "minAndroidSdk": 24,
   "entryClass": "example.kiosk.QrPlugin",
-  "description": "A corner widget that opens the chosen QR code full screen on tap, handy for sharing this kiosk's Wi-Fi credentials with a phone.",
+  "description": "A corner widget that opens the chosen QR code full screen on tap: a URL, plain text or this kiosk's Wi-Fi credentials. The same QR opens from a gesture with the Show QR code action.",
   "author": "shin-01",
   "license": "Apache-2.0 AND MIT",
   "capabilities": ["overlay"],
@@ -26,14 +26,6 @@
       "default": "Wi-Fi",
       "group": "QR code",
       "description": "The label on the corner widget and the heading of the QR card."
-    },
-    {
-      "key": "content",
-      "type": "string",
-      "title": "QR content",
-      "default": "",
-      "group": "QR code",
-      "description": "What the QR encodes: a WIFI: string, a URL or any text. Example: WIFI:T:WPA;S:MyNetwork;P:MyPassword;;"
     },
     {
       "key": "corner",
@@ -63,6 +55,61 @@
       "unit": "dp",
       "group": "QR code",
       "description": "The size of the QR code in the full screen card."
+    },
+    {
+      "key": "contentType",
+      "type": "select",
+      "title": "QR content type",
+      "default": "Wi-Fi",
+      "options": ["Wi-Fi", "URL", "Text"],
+      "group": "QR content",
+      "description": "What the QR code encodes. Wi-Fi shares this kiosk's network credentials, URL opens a link, Text encodes anything else."
+    },
+    {
+      "key": "wifiSsid",
+      "type": "string",
+      "title": "Network name (SSID)",
+      "default": "",
+      "group": "QR content",
+      "visibleWhen": { "key": "contentType", "equals": "Wi-Fi" },
+      "description": "The Wi-Fi network the QR code joins."
+    },
+    {
+      "key": "wifiSecurity",
+      "type": "select",
+      "title": "Security",
+      "default": "WPA/WPA2/WPA3",
+      "options": ["WPA/WPA2/WPA3", "Open (no password)"],
+      "group": "QR content",
+      "visibleWhen": { "key": "contentType", "equals": "Wi-Fi" },
+      "description": "The network's security type."
+    },
+    {
+      "key": "wifiPassword",
+      "type": "secret",
+      "default": "",
+      "title": "Password",
+      "group": "QR content",
+      "visibleWhen": { "key": "wifiSecurity", "equals": "WPA/WPA2/WPA3" },
+      "description": "The Wi-Fi password, masked in the Plugin Manager and Remote Admin."
+    },
+    {
+      "key": "urlContent",
+      "type": "string",
+      "title": "URL",
+      "default": "",
+      "group": "QR content",
+      "visibleWhen": { "key": "contentType", "equals": "URL" },
+      "description": "The link the QR code opens, such as https://www.kiosksatellite.com/"
+    },
+    {
+      "key": "textContent",
+      "type": "string",
+      "title": "Text",
+      "default": "",
+      "group": "QR content",
+      "visibleWhen": { "key": "contentType", "equals": "Text" },
+      "description": "Any text the QR code carries."
     }
   ],
   "commands": [

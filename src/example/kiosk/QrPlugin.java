@@ -24,10 +24,12 @@ import me.jxl.kiosk.plugins.OverlaySpec;
 import me.jxl.kiosk.plugins.PluginHost;
 
 /**
- * A small corner widget that shows the chosen QR code on tap, handy for sharing
- * this kiosk's Wi-Fi credentials with a guest phone. The QR content is a plain
- * setting, so any text, URL or WIFI: string works. QR rendering uses Nayuki's
- * MIT licensed generator (io.nayuki.qrcodegen), bundled in this example.
+ * A small corner widget that shows the chosen QR code on tap. The QR content is
+ * a URL, plain text or this kiosk's Wi-Fi credentials, handy for sharing any of
+ * them with a phone. The same QR also opens from the Show QR code action, which
+ * users can assign to a gesture, the kiosk drawer or a Home Assistant button.
+ * QR rendering uses Nayuki's MIT licensed generator (io.nayuki.qrcodegen),
+ * bundled with this plugin.
  */
 public final class QrPlugin implements KioskPlugin {
     private static final String WIDGET = "qr-widget";
@@ -35,6 +37,7 @@ public final class QrPlugin implements KioskPlugin {
 
     private PluginHost host;
     private String content = "";
+    private String contentType = "Wi-Fi";
     private String title = "Wi-Fi";
     private String corner = "Top right";
     private String icon = "mdi:qrcode";
@@ -51,13 +54,16 @@ public final class QrPlugin implements KioskPlugin {
     @Override
     public synchronized void configure(Map<String, Object> settings) {
         String previous = content;
-        content = string(settings.get("content"));
+        String previousType = contentType;
+        contentType = string(settings.get("contentType"));
+        if (contentType.isEmpty()) contentType = "Wi-Fi";
         title = string(settings.get("title"));
         corner = string(settings.get("corner"));
         icon = string(settings.get("icon"));
         showWidget = Boolean.TRUE.equals(settings.get("showWidget"));
         Object size = settings.get("qrSize");
         qrSize = size instanceof Number ? ((Number) size).doubleValue() : 320;
+        content = buildContent(settings);
         if (host == null) return;
         if (showWidget) showWidget();
         else {
@@ -66,14 +72,39 @@ public final class QrPlugin implements KioskPlugin {
             } catch (UnsupportedOperationException olderHost) {}
         }
         // A settings edit refreshes the open card so it never shows a stale code.
-        if (codeOpen && !content.equals(previous)) showCode();
+        if (codeOpen && (!content.equals(previous) || !contentType.equals(previousType))) showCode();
+    }
+
+    /**
+     * What the QR encodes, from the settings of the selected content type:
+     * a Wi-Fi join string, a URL or the plain text as typed.
+     */
+    static String buildContent(Map<String, Object> settings) {
+        String type = string(settings.get("contentType"));
+        if ("Text".equals(type)) return string(settings.get("textContent"));
+        if ("URL".equals(type)) return string(settings.get("urlContent"));
+        return wifiPayload(settings);
+    }
+
+    /** The standard Wi-Fi join string for the configured network. */
+    static String wifiPayload(Map<String, Object> settings) {
+        String ssid = string(settings.get("wifiSsid"));
+        if (ssid.isEmpty()) return "";
+        if ("Open (no password)".equals(string(settings.get("wifiSecurity"))))
+            return "WIFI:T:nopass;S:" + escape(ssid) + ";;";
+        return "WIFI:T:WPA;S:" + escape(ssid) + ";P:" + escape(string(settings.get("wifiPassword"))) + ";;";
     }
 
     private static String string(Object value) {
         return value instanceof String ? (String) value : "";
     }
 
-    /** The Show QR code command and the widget's tap action. */
+    /** Escapes the Wi-Fi string's reserved characters with a backslash. */
+    private static String escape(String value) {
+        return value.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace(":", "\\:").replace("\"", "\\\"");
+    }
+
+    /** The Show QR code action, reachable from a gesture, the drawer, Home Assistant and the widget's tap. */
     @Override
     public synchronized void execute(String command, Map<String, Object> arguments) {
         if ("showQr".equals(command)) showCode();
@@ -178,7 +209,7 @@ public final class QrPlugin implements KioskPlugin {
             root.setPadding(theme.px(20), theme.px(12), theme.px(20), theme.px(12));
             TextView label = (TextView) root.getChildAt(0);
             theme.styleText(label, 15, 600, "onSurface");
-            Drawable glyph = icon(theme, "mdi:qrcode".equals(icon) || icon.isEmpty() ? "mdi:qrcode" : icon, "primary");
+            Drawable glyph = icon(theme, icon.isEmpty() ? "mdi:qrcode" : icon, "primary");
             if (glyph != null) glyph.setBounds(0, 0, theme.px(24), theme.px(24));
             label.setCompoundDrawablesRelative(glyph, null, null, null);
             label.setCompoundDrawablePadding(theme.px(10));
