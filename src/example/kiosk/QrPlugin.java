@@ -24,26 +24,28 @@ import me.jxl.kiosk.plugins.OverlaySpec;
 import me.jxl.kiosk.plugins.PluginHost;
 
 /**
- * A small corner widget that shows the chosen QR code on tap. The QR content is
- * a URL, plain text or this kiosk's Wi-Fi credentials, handy for sharing any of
- * them with a phone. The same QR also opens from the Show QR code action, which
- * users can assign to a gesture, the kiosk drawer or a Home Assistant button.
- * QR rendering uses Nayuki's MIT licensed generator (io.nayuki.qrcodegen),
- * bundled with this plugin.
+ * A small corner widget that shows the primary QR code on tap, plus up to four
+ * QR codes that open through plugin actions users bind to gestures, the kiosk
+ * drawer or Home Assistant buttons. Each QR encodes a URL, plain text or Wi-Fi
+ * credentials. The screensaver's stock corner widgets are a Kiosk Satellite
+ * surface the plugin SDK cannot add to, so these QR codes live in the plugin's
+ * own overlays. QR rendering uses Nayuki's MIT licensed generator
+ * (io.nayuki.qrcodegen), bundled with this plugin.
  */
 public final class QrPlugin implements KioskPlugin {
+    /** The slots, in manifest order. Slot 1 also backs the corner widget. */
+    private static final int SLOTS = 4;
     private static final String WIDGET = "qr_widget";
     private static final String CODE = "qr_code";
 
     private PluginHost host;
-    private String content = "";
-    private String contentType = "Wi-Fi";
-    private String title = "Wi-Fi";
+    private final String[] content = new String[SLOTS];
+    private final String[] title = new String[SLOTS];
+    private boolean showWidget = true;
     private String corner = "Top right";
     private String icon = "mdi:qrcode";
-    private boolean showWidget = true;
     private double qrSize = 320;
-    private boolean codeOpen;
+    private int openSlot = -1;
 
     @Override
     public synchronized void start(PluginHost host, Map<String, Object> settings) {
@@ -53,17 +55,17 @@ public final class QrPlugin implements KioskPlugin {
 
     @Override
     public synchronized void configure(Map<String, Object> settings) {
-        String previous = content;
-        String previousType = contentType;
-        contentType = string(settings.get("contentType"));
-        if (contentType.isEmpty()) contentType = "Wi-Fi";
-        title = string(settings.get("title"));
+        String[] previous = content.clone();
+        for (int slot = 0; slot < SLOTS; slot++) {
+            String prefix = "qr" + (slot + 1);
+            title[slot] = string(settings.get(prefix + "Title"));
+            content[slot] = buildContent(settings, prefix);
+        }
+        showWidget = Boolean.TRUE.equals(settings.get("showWidget"));
         corner = string(settings.get("corner"));
         icon = string(settings.get("icon"));
-        showWidget = Boolean.TRUE.equals(settings.get("showWidget"));
         Object size = settings.get("qrSize");
         qrSize = size instanceof Number ? ((Number) size).doubleValue() : 320;
-        content = buildContent(settings);
         if (host == null) return;
         if (showWidget) showWidget();
         else {
@@ -72,18 +74,22 @@ public final class QrPlugin implements KioskPlugin {
             } catch (UnsupportedOperationException olderHost) {}
         }
         // A settings edit refreshes the open card so it never shows a stale code.
-        if (codeOpen && (!content.equals(previous) || !contentType.equals(previousType))) showCode();
+        if (openSlot >= 0 && !content[openSlot].equals(previous[openSlot])) showCode(openSlot);
     }
 
     /**
-     * What the QR encodes, from the settings of the selected content type:
-     * a Wi-Fi join string, a URL or the plain text as typed.
+     * What a slot's QR encodes, from its settings: a Wi-Fi join string, a URL
+     * or the plain text as typed.
      */
-    static String buildContent(Map<String, Object> settings) {
-        String type = string(settings.get("contentType"));
-        if ("Text".equals(type)) return string(settings.get("textContent"));
-        if ("URL".equals(type)) return string(settings.get("urlContent"));
-        return wifiPayload(settings);
+    static String buildContent(Map<String, Object> settings, String prefix) {
+        String type = string(settings.get(prefix + "Type"));
+        if ("Text".equals(type)) return string(settings.get(prefix + "Text"));
+        if ("URL".equals(type)) return string(settings.get(prefix + "Url"));
+        Map<String, Object> wifi = new java.util.LinkedHashMap<>();
+        wifi.put("wifiSsid", settings.get(prefix + "Ssid"));
+        wifi.put("wifiSecurity", settings.get(prefix + "Security"));
+        wifi.put("wifiPassword", settings.get(prefix + "Password"));
+        return wifiPayload(wifi);
     }
 
     /** The standard Wi-Fi join string for the configured network. */
@@ -104,15 +110,24 @@ public final class QrPlugin implements KioskPlugin {
         return value.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace(":", "\\:").replace("\"", "\\\"");
     }
 
-    /** The Show QR code action, reachable from a gesture, the drawer, Home Assistant and the widget's tap. */
+    /**
+     * The four Show QR code actions, one per slot. Users bind them to gestures
+     * in Gestures > Run a plugin action, and can also keep them in the kiosk
+     * drawer or expose them as Home Assistant buttons from the plugin subpage.
+     */
     @Override
     public synchronized void execute(String command, Map<String, Object> arguments) {
-        if ("showQr".equals(command)) showCode();
+        for (int slot = 0; slot < SLOTS; slot++) {
+            if (("showQr" + (slot == 0 ? "" : slot + 1)).equals(command)) {
+                showCode(slot);
+                return;
+            }
+        }
     }
 
     @Override
     public synchronized void onEvent(String event, Map<String, Object> payload) {
-        if ("overlay.closed".equals(event) && payload != null && CODE.equals(payload.get("key"))) codeOpen = false;
+        if ("overlay.closed".equals(event) && payload != null && CODE.equals(payload.get("key"))) openSlot = -1;
     }
 
     @Override
@@ -122,11 +137,11 @@ public final class QrPlugin implements KioskPlugin {
 
     private synchronized void showWidget() {
         if (host == null) return;
-        if (title.isEmpty() || content.isEmpty()) {
+        if (title[0].isEmpty() || content[0].isEmpty()) {
             try {
                 host.hideOverlay(WIDGET);
             } catch (UnsupportedOperationException olderHost) {}
-            host.status("Set the widget title and the QR content in the plugin settings.", true);
+            host.status("Set the first QR code's title and content to show the corner widget.", true);
             return;
         }
         OverlaySpec spec = OverlaySpec.at(anchor(corner))
@@ -141,20 +156,20 @@ public final class QrPlugin implements KioskPlugin {
         }
     }
 
-    private synchronized void showCode() {
+    private synchronized void showCode(int slot) {
         if (host == null) return;
-        if (content.isEmpty()) {
-            host.status("Set the QR content in the plugin settings first.", true);
+        if (content[slot].isEmpty()) {
+            host.status("QR code " + (slot + 1) + " has no content. Set it in the plugin settings.", true);
             return;
         }
-        codeOpen = true;
+        openSlot = slot;
         OverlaySpec spec = OverlaySpec.fullScreen()
             .closeOnOutsideTouch(true)
             .enter(OverlaySpec.FADE)
             .exit(OverlaySpec.FADE)
             .transitionDuration(200);
         try {
-            host.showOverlay(CODE, spec, new Code());
+            host.showOverlay(CODE, spec, new Code(slot));
         } catch (UnsupportedOperationException olderHost) {
             host.status("Native overlays need a newer Kiosk Satellite.", true);
         }
@@ -185,7 +200,7 @@ public final class QrPlugin implements KioskPlugin {
         }
     }
 
-    /** The corner widget: a KS themed pill with the chosen icon and title. */
+    /** The corner widget: a KS themed pill with the chosen icon and the first QR code's title. */
     private final class Widget implements OverlayFactory {
         @Override
         public View create(Context context, KsTheme theme) {
@@ -193,9 +208,9 @@ public final class QrPlugin implements KioskPlugin {
             root.setOrientation(LinearLayout.HORIZONTAL);
             root.setGravity(Gravity.CENTER);
             TextView label = new TextView(context);
-            label.setText(title);
+            label.setText(title[0]);
             root.addView(label);
-            root.setOnClickListener(view -> tap(QrPlugin.this::showCode));
+            root.setOnClickListener(view -> tap(() -> showCode(0)));
             onThemeChanged(root, theme);
             return root;
         }
@@ -218,6 +233,12 @@ public final class QrPlugin implements KioskPlugin {
 
     /** The full screen card: a white QR panel over a dimmed kiosk. */
     private final class Code implements OverlayFactory {
+        private final int slot;
+
+        Code(int slot) {
+            this.slot = slot;
+        }
+
         @Override
         public View create(Context context, KsTheme theme) {
             FrameLayout root = new FrameLayout(context);
@@ -228,11 +249,11 @@ public final class QrPlugin implements KioskPlugin {
             // Taps on the card stay on the card.
             card.setClickable(true);
             TextView heading = new TextView(context);
-            heading.setText(title);
+            heading.setText(title[slot]);
             heading.setGravity(Gravity.CENTER);
             card.addView(heading);
             ImageView image = new ImageView(context);
-            image.setImageBitmap(bitmap(buildQr()));
+            image.setImageBitmap(bitmap(buildQr(content[slot])));
             int size = (int) Math.max(160, Math.min(qrSize, 480));
             LinearLayout.LayoutParams imageParams =
                 new LinearLayout.LayoutParams(theme.px(size), theme.px(size));
@@ -275,7 +296,7 @@ public final class QrPlugin implements KioskPlugin {
         }
     }
 
-    private synchronized QrCode buildQr() {
+    private static QrCode buildQr(String content) {
         return QrCode.encodeText(content, QrCode.Ecc.MEDIUM);
     }
 
@@ -302,7 +323,7 @@ public final class QrPlugin implements KioskPlugin {
     }
 
     private synchronized void closeCode() {
-        codeOpen = false;
+        openSlot = -1;
         if (host != null) host.hideOverlay(CODE);
     }
 }
