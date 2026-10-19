@@ -41,59 +41,62 @@ public final class QrPluginTest {
 
     public static void main(String[] args) {
         Host host = new Host();
+        // Overlay keys follow [a-z][a-z0-9_]{0,39}; KS rejects anything else.
+        assert "qr_widget".matches("[a-z][a-z0-9_]{0,39}");
+        assert "qr_code".matches("[a-z][a-z0-9_]{0,39}");
         QrPlugin plugin = new QrPlugin();
 
         // The widget appears once started, anchored where the settings say.
         plugin.start(host, settings());
-        OverlaySpec widget = host.shown.get("qr-widget");
+        OverlaySpec widget = host.shown.get("qr_widget");
         assert widget != null;
         assert OverlaySpec.BOTTOM_LEFT.equals(widget.anchor()) && widget.inset() == 16;
         assert OverlaySpec.FADE.equals(widget.enter()) && widget.touchable();
 
         // The gesture, drawer or widget action opens the full screen card.
         plugin.execute("showQr", new LinkedHashMap<String, Object>());
-        OverlaySpec code = host.shown.get("qr-code");
+        OverlaySpec code = host.shown.get("qr_code");
         assert code != null;
         assert code.width() == OverlaySpec.FILL && code.height() == OverlaySpec.FILL;
         assert code.closeOnOutsideTouch() && code.closeOnBack();
 
         // KS removes the card itself when it sends overlay.closed; the widget keeps its key.
-        plugin.onEvent("overlay.closed", map("key", "qr-code"));
-        assert host.shown.containsKey("qr-widget");
+        plugin.onEvent("overlay.closed", map("key", "qr_code"));
+        assert host.shown.containsKey("qr_widget");
         plugin.execute("showQr", map());
-        plugin.onEvent("overlay.closed", map("key", "qr-widget"));
-        assert host.shown.containsKey("qr-code");
+        plugin.onEvent("overlay.closed", map("key", "qr_widget"));
+        assert host.shown.containsKey("qr_code");
 
         // Turning the widget off removes it.
         Map<String, Object> off = settings();
         off.put("showWidget", false);
         plugin.configure(off);
-        assert !host.shown.containsKey("qr-widget");
+        assert !host.shown.containsKey("qr_widget");
         Map<String, Object> on = settings();
         plugin.configure(on);
-        assert host.shown.containsKey("qr-widget");
+        assert host.shown.containsKey("qr_widget");
 
         // Switching the content type to URL keeps the widget up with the URL.
         Map<String, Object> url = settings();
         url.put("contentType", "URL");
         plugin.configure(url);
-        assert host.shown.containsKey("qr-widget");
+        assert host.shown.containsKey("qr_widget");
 
         // Switching to plain text works the same.
         Map<String, Object> text = settings();
         text.put("contentType", "Text");
         plugin.configure(text);
-        assert host.shown.containsKey("qr-widget");
+        assert host.shown.containsKey("qr_widget");
 
         // Empty content keeps the widget away and says why.
         Map<String, Object> empty = settings();
         empty.put("contentType", "URL");
         empty.put("urlContent", "");
         plugin.configure(empty);
-        assert !host.shown.containsKey("qr-widget");
+        assert !host.shown.containsKey("qr_widget");
         assert host.status != null;
         plugin.configure(settings());
-        assert host.shown.containsKey("qr-widget");
+        assert host.shown.containsKey("qr_widget");
 
         // The Wi-Fi string escapes its reserved characters.
         Map<String, Object> tricky = settings();

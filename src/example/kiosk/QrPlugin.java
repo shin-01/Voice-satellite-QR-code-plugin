@@ -32,8 +32,8 @@ import me.jxl.kiosk.plugins.PluginHost;
  * bundled with this plugin.
  */
 public final class QrPlugin implements KioskPlugin {
-    private static final String WIDGET = "qr-widget";
-    private static final String CODE = "qr-code";
+    private static final String WIDGET = "qr_widget";
+    private static final String CODE = "qr_code";
 
     private PluginHost host;
     private String content = "";
