@@ -37,6 +37,8 @@ public final class QrPlugin implements KioskPlugin {
     private static final int SLOTS = 4;
     private static final String WIDGET = "qr_widget";
     private static final String CODE = "qr_code";
+    /** Full screen, visual only: carries the pill during a drag, so it is never clipped. */
+    private static final String DRAG = "qr_drag";
 
     private PluginHost host;
     private final String[] content = new String[SLOTS];
@@ -49,6 +51,15 @@ public final class QrPlugin implements KioskPlugin {
     private String icon = "mdi:qrcode";
     private double qrSize = 320;
     private int openSlot = -1;
+    /** The finger's raw position while dragging, with the screen's px and dp sizes. */
+    private boolean dragging;
+    private float dragX;
+    private float dragY;
+    private float dragDensity;
+    private float dragScreenW;
+    private float dragScreenH;
+    /** The live drag layer view, invalidated as the finger moves. */
+    private View dragLayerView;
 
     @Override
     public synchronized void start(PluginHost host, Map<String, Object> settings) {
@@ -222,7 +233,7 @@ public final class QrPlugin implements KioskPlugin {
         private static final int MAX_DRAG_SLOPE = 12;
         private float downX;
         private float downY;
-        private boolean dragging;
+        private float moved;
 
         @Override
         public View create(final Context context, KsTheme theme) {
@@ -240,32 +251,31 @@ public final class QrPlugin implements KioskPlugin {
                     case android.view.MotionEvent.ACTION_DOWN:
                         downX = event.getRawX();
                         downY = event.getRawY();
-                        dragging = false;
+                        moved = 0;
                         return true;
                     case android.view.MotionEvent.ACTION_MOVE: {
                         float density = view.getResources().getDisplayMetrics().density;
                         if (!dragging) {
-                            float moved = Math.max(
+                            moved = Math.max(moved, Math.max(
                                 Math.abs(event.getRawX() - downX),
-                                Math.abs(event.getRawY() - downY));
-                            if (moved / density > MAX_DRAG_SLOPE) dragging = true;
+                                Math.abs(event.getRawY() - downY)));
+                            if (moved / density > MAX_DRAG_SLOPE) {
+                                dragDensity = density;
+                                dragScreenW = view.getResources().getDisplayMetrics().widthPixels;
+                                dragScreenH = view.getResources().getDisplayMetrics().heightPixels;
+                                tap(() -> startDrag(view, event.getRawX(), event.getRawY()));
+                            }
                         }
-                        if (dragging) {
-                            // Slide the pill under the finger without rebuilding the
-                            // overlay, which would interrupt the gesture.
-                            view.setTranslationX(view.getTranslationX() + event.getRawX() - downX);
-                            view.setTranslationY(view.getTranslationY() + event.getRawY() - downY);
-                            downX = event.getRawX();
-                            downY = event.getRawY();
-                        }
+                        if (dragging) tap(() -> moveDrag(event.getRawX(), event.getRawY()));
                         return true;
                     }
                     case android.view.MotionEvent.ACTION_UP:
                     case android.view.MotionEvent.ACTION_CANCEL: {
                         boolean wasDragging = dragging;
+                        boolean wasMove = moved > 0;
                         dragging = false;
-                        if (wasDragging) tap(() -> dropWidget(view));
-                        else tap(() -> showCode(0));
+                        if (wasDragging) tap(QrPlugin.this::dropWidget);
+                        else if (!wasMove) tap(() -> showCode(0));
                         return true;
                     }
                 }
@@ -292,22 +302,55 @@ public final class QrPlugin implements KioskPlugin {
     }
 
     /**
-     * The finger left the pill somewhere new. Turn the translated view into a
-     * saved free position, persist it and rebuild the overlay there, so the spot
+     * KS clips an overlay's view to the overlay's own rectangle, so a pill
+     * translated out of its corner disappears. The drag instead hands the pill
+     * to a full screen, visual-only layer that follows the finger everywhere.
+     * The widget's view stays alive and keeps the touch stream, its own pill
+     * hidden, until the release rebuilds the widget at the new spot.
+     */
+    private synchronized void startDrag(View view, float rawX, float rawY) {
+        if (host == null || dragging) return;
+        dragging = true;
+        dragX = rawX;
+        dragY = rawY;
+        try {
+            host.showOverlay(DRAG, OverlaySpec.fullScreen().touchable(false), new DragLayer());
+            view.setAlpha(0);
+        } catch (UnsupportedOperationException olderHost) {
+            dragging = false;
+        }
+    }
+
+    /** The pill follows the finger on the drag layer. */
+    private synchronized void moveDrag(float rawX, float rawY) {
+        if (!dragging) return;
+        dragX = rawX;
+        dragY = rawY;
+        if (dragLayerView != null) dragLayerView.invalidate();
+    }
+
+    /**
+     * The finger left the pill somewhere new. Turn the drop point into a saved
+     * free position, persist it and rebuild the widget overlay there, so the spot
      * survives settings edits, theme changes and app restarts.
      */
-    private synchronized void dropWidget(View view) {
-        int[] at = new int[2];
-        view.getLocationOnScreen(at);
-        float density = view.getResources().getDisplayMetrics().density;
-        int screenW = Math.round(view.getResources().getDisplayMetrics().widthPixels / density);
-        int screenH = Math.round(view.getResources().getDisplayMetrics().heightPixels / density);
-        // The pill's center, in dp, relative to the kiosk's center.
-        int centerX = Math.round(at[0] / density + view.getWidth() / 2f / density);
-        int centerY = Math.round(at[1] / density + view.getHeight() / 2f / density);
+    private synchronized void dropWidget() {
+        if (!dragging) return;
+        dragging = false;
+        try {
+            host.hideOverlay(DRAG);
+        } catch (UnsupportedOperationException olderHost) {}
+        float density = dragDensity;
+        int screenW = Math.round(dragScreenW);
+        int screenH = Math.round(dragScreenH);
+        if (density <= 0) return;
+        // The pill's center at the drop, in dp, relative to the kiosk's center.
+        int centerX = Math.round(dragX / density);
+        int centerY = Math.round(dragY / density);
         widgetX = Math.max(-screenW / 2, Math.min(screenW / 2, centerX - screenW / 2));
         widgetY = Math.max(-screenH / 2, Math.min(screenH / 2, centerY - screenH / 2));
         placement = "Free";
+        dragLayerView = null;
         try {
             Map<String, Object> values = new java.util.LinkedHashMap<>();
             values.put("placement", "Free");
@@ -316,6 +359,55 @@ public final class QrPlugin implements KioskPlugin {
             host.updateSettings(values);
         } catch (UnsupportedOperationException olderHost) {}
         showWidget();
+    }
+
+    /**
+     * The full screen, visual-only layer a drag draws on. It paints the pill at
+     * the finger, in the same KS style, so the drag is visible everywhere without
+     * the widget's clipping. Touches pass through to nothing: the widget's own
+     * view still owns the gesture.
+     */
+    private final class DragLayer implements OverlayFactory {
+        @Override
+        public View create(Context context, final KsTheme theme) {
+            final View view = new View(context) {
+                @Override
+                protected void onDraw(Canvas canvas) {
+                    float density = getResources().getDisplayMetrics().density;
+                    // A pill the size of the widget's, centered on the finger.
+                    int pillW = (int) (140 * density);
+                    int pillH = (int) (44 * density);
+                    float left = dragX - pillW / 2f;
+                    float top = dragY - pillH / 2f;
+                    android.graphics.RectF bounds = new android.graphics.RectF(left, top, left + pillW, top + pillH);
+                    GradientDrawable pill = theme.card();
+                    pill.setCornerRadius(theme.px(100));
+                    pill.setBounds((int) left, (int) top, (int) (left + pillW), (int) (top + pillH));
+                    pill.draw(canvas);
+                    // The title, next to a small qrcode glyph.
+                    android.text.TextPaint text = new android.text.TextPaint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+                    text.setColor(theme.color("onSurface"));
+                    text.setTextSize(15 * density);
+                    text.setTypeface(theme.typeface(600));
+                    float textX = left + 20 * density;
+                    float textY = top + pillH / 2f - (text.descent() + text.ascent()) / 2f;
+                    canvas.drawText(title[0], textX, textY, text);
+                    Drawable glyph = icon(theme, icon.isEmpty() ? "mdi:qrcode" : icon, "primary");
+                    if (glyph != null) {
+                        int g = (int) (24 * density);
+                        glyph.setBounds((int) (left + pillW - 20 * density - g), (int) (top + pillH / 2f - g / 2f), (int) (left + pillW - 20 * density), (int) (top + pillH / 2f + g / 2f));
+                        glyph.draw(canvas);
+                    }
+                }
+            };
+            dragLayerView = view;
+            return view;
+        }
+
+        @Override
+        public void onThemeChanged(View view, KsTheme theme) {
+            view.invalidate();
+        }
     }
 
     /** The full screen card: a white QR panel over a dimmed kiosk. */
