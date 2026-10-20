@@ -5,8 +5,10 @@ plus up to four QR codes that open through actions you can bind to gestures.
 
 ## What it does
 
-- A themed pill widget with an icon and title of your picking. Tapping it opens
-  **QR code 1**; dragging it moves it anywhere on the kiosk.
+- A themed pill for every QR code you configure. **Grouped** stacks one pill with
+  a button per QR code; **Separate** gives each QR code its own pill. Tapping a
+  button or pill opens that QR; dragging moves the whole stack anywhere on the
+  kiosk.
 - **Anchored** keeps the widget in the corner you pick. **Free** leaves it where
   you last dragged it, and a drag switches the placement to Free by itself. The
   dropped spot survives settings edits, theme changes and app restarts.
@@ -27,8 +29,9 @@ plus up to four QR codes that open through actions you can bind to gestures.
 
 | Setting | Meaning |
 | --- | --- |
-| Show corner widget | Turn the widget on or off. It opens QR code 1 |
-| Placement | `Anchored` or `Free`. Dragging the pill switches it to Free |
+| Show corner widget | Turn the pills on or off |
+| Pill layout | `Grouped`, one pill with a button per QR code, or `Separate`, one pill per QR code |
+| Placement | `Anchored` or `Free`. Dragging the pills switches it to Free |
 | Corner | The anchor corner, shown while Placement is Anchored |
 | Free position X, Free position Y | Kept by the widget when you drag it |
 | Widget icon | The icon on the pill |

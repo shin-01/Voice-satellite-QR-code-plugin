@@ -26,6 +26,15 @@
       "description": "Keep the tappable widget, which opens the first QR code, in a display corner."
     },
     {
+      "key": "pillMode",
+      "type": "select",
+      "title": "Pill layout",
+      "default": "Grouped",
+      "options": ["Grouped", "Separate"],
+      "group": "QR code 1",
+      "description": "Grouped is one pill with a button per QR code. Separate gives each QR code its own pill, stacked."
+    },
+    {
       "key": "placement",
       "type": "select",
       "title": "Placement",

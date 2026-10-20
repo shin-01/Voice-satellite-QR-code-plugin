@@ -67,6 +67,16 @@ public final class QrPluginTest {
         assert floating != null && floating.offsetX() == -120 && floating.offsetY() == 60;
         assert OverlaySpec.CENTER.equals(floating.anchor()) && floating.inset() == 0;
 
+        // Separate mode shows the same stack through one overlay, restyled.
+        Map<String, Object> separate = settings();
+        separate.put("pillMode", "Separate");
+        plugin.configure(separate);
+        assert host.shown.get("qr_widget") != null;
+
+        // Grouped mode stays the default shape.
+        plugin.configure(settings());
+        assert host.shown.get("qr_widget") != null;
+
         // Every slot's action opens the same full screen card.
         for (int slot = 1; slot <= 4; slot++) {
             plugin.execute("showQr" + (slot == 1 ? "" : slot), new LinkedHashMap<String, Object>());

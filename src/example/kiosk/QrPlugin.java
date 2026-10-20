@@ -44,6 +44,8 @@ public final class QrPlugin implements KioskPlugin {
     private final String[] content = new String[SLOTS];
     private final String[] title = new String[SLOTS];
     private boolean showWidget = true;
+    /** One pill with a button per QR code, or one pill per QR code. */
+    private String pillMode = "Grouped";
     private String corner = "Top right";
     private String placement = "Anchored";
     private int widgetX;
@@ -60,6 +62,8 @@ public final class QrPlugin implements KioskPlugin {
     private float dragScreenH;
     /** The live drag layer view, invalidated as the finger moves. */
     private View dragLayerView;
+    /** The row title the drag layer carries. */
+    private String dragTitleText;
 
     @Override
     public synchronized void start(PluginHost host, Map<String, Object> settings) {
@@ -76,6 +80,8 @@ public final class QrPlugin implements KioskPlugin {
             content[slot] = buildContent(settings, prefix);
         }
         showWidget = Boolean.TRUE.equals(settings.get("showWidget"));
+        pillMode = string(settings.get("pillMode"));
+        if (pillMode.isEmpty()) pillMode = "Grouped";
         corner = string(settings.get("corner"));
         placement = string(settings.get("placement"));
         if (placement.isEmpty()) placement = "Anchored";
@@ -153,13 +159,28 @@ public final class QrPlugin implements KioskPlugin {
         host = null;
     }
 
+    /** The QR codes that have both a title and content, in slot order. */
+    private int[] activeSlots() {
+        int count = 0;
+        for (int slot = 0; slot < SLOTS; slot++) {
+            if (!title[slot].isEmpty() && !content[slot].isEmpty()) count++;
+        }
+        int[] active = new int[count];
+        int next = 0;
+        for (int slot = 0; slot < SLOTS; slot++) {
+            if (!title[slot].isEmpty() && !content[slot].isEmpty()) active[next++] = slot;
+        }
+        return active;
+    }
+
     private synchronized void showWidget() {
         if (host == null) return;
-        if (title[0].isEmpty() || content[0].isEmpty()) {
+        int[] active = activeSlots();
+        if (active.length == 0) {
             try {
                 host.hideOverlay(WIDGET);
             } catch (UnsupportedOperationException olderHost) {}
-            host.status("Set the first QR code's title and content to show the corner widget.", true);
+            host.status("Give a QR code both a title and content to show the pill.", true);
             return;
         }
         boolean free = "Free".equals(placement);
@@ -173,7 +194,7 @@ public final class QrPlugin implements KioskPlugin {
             .exit(OverlaySpec.FADE)
             .transitionDuration(200);
         try {
-            host.showOverlay(WIDGET, spec, new Widget());
+            host.showOverlay(WIDGET, spec, new Widget(active));
         } catch (UnsupportedOperationException olderHost) {
             host.status("Native overlays need a newer Kiosk Satellite.", true);
         }
@@ -228,31 +249,46 @@ public final class QrPlugin implements KioskPlugin {
         }
     }
 
-    /** The corner widget: a KS themed pill with the chosen icon and the first QR code's title. */
+    /**
+     * The corner pill. Grouped is one pill with a button per active QR code;
+     * Separate stacks one pill per QR code. Either way the whole stack is one
+     * overlay, so dragging moves it together and a tap opens that QR's card.
+     */
     private final class Widget implements OverlayFactory {
         private static final int MAX_DRAG_SLOPE = 12;
+        private final int[] active;
         private float downX;
         private float downY;
         private float moved;
 
+        Widget(int[] active) {
+            this.active = active;
+        }
+
         @Override
         public View create(final Context context, KsTheme theme) {
+            boolean grouped = "Grouped".equals(pillMode);
             LinearLayout root = new LinearLayout(context);
-            root.setOrientation(LinearLayout.HORIZONTAL);
-            root.setGravity(Gravity.CENTER);
-            TextView label = new TextView(context);
-            label.setText(title[0]);
-            root.addView(label);
-            // A drag moves the widget anywhere on the kiosk; a plain tap opens the
-            // QR. The touch listener owns the whole stream, so the tap is measured
-            // against the same slop that starts the drag.
+            root.setOrientation(grouped ? LinearLayout.VERTICAL : LinearLayout.VERTICAL);
+            root.setGravity(Gravity.CENTER_HORIZONTAL);
+            for (int i = 0; i < active.length; i++) {
+                final int slot = active[i];
+                TextView label = new TextView(context);
+                label.setText(title[slot]);
+                label.setGravity(Gravity.CENTER);
+                label.setOnClickListener(view -> tap(() -> showCode(slot)));
+                root.addView(label, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            }
+            // A drag moves the whole stack anywhere on the kiosk. The touch
+            // listener owns the stream, so taps still reach the row buttons.
             root.setOnTouchListener((view, event) -> {
                 switch (event.getActionMasked()) {
                     case android.view.MotionEvent.ACTION_DOWN:
                         downX = event.getRawX();
                         downY = event.getRawY();
                         moved = 0;
-                        return true;
+                        return false;
                     case android.view.MotionEvent.ACTION_MOVE: {
                         float density = view.getResources().getDisplayMetrics().density;
                         if (!dragging) {
@@ -263,20 +299,19 @@ public final class QrPlugin implements KioskPlugin {
                                 dragDensity = density;
                                 dragScreenW = view.getResources().getDisplayMetrics().widthPixels;
                                 dragScreenH = view.getResources().getDisplayMetrics().heightPixels;
-                                tap(() -> startDrag(view, event.getRawX(), event.getRawY()));
+                                final TextView pressed = pressedRow(view, event);
+                                tap(() -> startDrag(view, pressed == null ? title[0] : pressed.getText().toString(), event.getRawX(), event.getRawY()));
                             }
                         }
                         if (dragging) tap(() -> moveDrag(event.getRawX(), event.getRawY()));
-                        return true;
+                        return dragging;
                     }
                     case android.view.MotionEvent.ACTION_UP:
                     case android.view.MotionEvent.ACTION_CANCEL: {
                         boolean wasDragging = dragging;
-                        boolean wasMove = moved > 0;
                         dragging = false;
                         if (wasDragging) tap(QrPlugin.this::dropWidget);
-                        else if (!wasMove) tap(() -> showCode(0));
-                        return true;
+                        return wasDragging;
                     }
                 }
                 return false;
@@ -288,16 +323,34 @@ public final class QrPlugin implements KioskPlugin {
         @Override
         public void onThemeChanged(View view, KsTheme theme) {
             LinearLayout root = (LinearLayout) view;
-            GradientDrawable pill = theme.card();
-            pill.setCornerRadius(theme.px(100));
-            root.setBackground(pill);
-            root.setPadding(theme.px(20), theme.px(12), theme.px(20), theme.px(12));
-            TextView label = (TextView) root.getChildAt(0);
-            theme.styleText(label, 15, 600, "onSurface");
-            Drawable glyph = icon(theme, icon.isEmpty() ? "mdi:qrcode" : icon, "primary");
-            if (glyph != null) glyph.setBounds(0, 0, theme.px(24), theme.px(24));
-            label.setCompoundDrawablesRelative(glyph, null, null, null);
-            label.setCompoundDrawablePadding(theme.px(10));
+            boolean grouped = "Grouped".equals(pillMode);
+            if (grouped) {
+                GradientDrawable pill = theme.card();
+                pill.setCornerRadius(theme.px(100));
+                root.setBackground(pill);
+                root.setPadding(theme.px(20), theme.px(12), theme.px(20), theme.px(12));
+            } else {
+                // Separate: the stack itself is transparent, each row is its own pill.
+                root.setBackground(null);
+                root.setPadding(0, 0, 0, 0);
+            }
+            for (int i = 0; i < root.getChildCount(); i++) {
+                TextView label = (TextView) root.getChildAt(i);
+                LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) label.getLayoutParams();
+                params.topMargin = grouped && i > 0 ? theme.px(6) : (i > 0 ? theme.px(8) : 0);
+                label.setLayoutParams(params);
+                theme.styleText(label, 15, 600, "onSurface");
+                if (!grouped) {
+                    GradientDrawable own = theme.card();
+                    own.setCornerRadius(theme.px(100));
+                    label.setBackground(own);
+                }
+                Drawable glyph = icon(theme, icon.isEmpty() ? "mdi:qrcode" : icon, "primary");
+                if (glyph != null) glyph.setBounds(0, 0, theme.px(24), theme.px(24));
+                label.setCompoundDrawablesRelative(glyph, null, null, null);
+                label.setCompoundDrawablePadding(theme.px(10));
+                label.setPadding(theme.px(12), theme.px(8), theme.px(12), theme.px(8));
+            }
         }
     }
 
@@ -308,9 +361,23 @@ public final class QrPlugin implements KioskPlugin {
      * The widget's view stays alive and keeps the touch stream, its own pill
      * hidden, until the release rebuilds the widget at the new spot.
      */
-    private synchronized void startDrag(View view, float rawX, float rawY) {
+    /** The row under the finger, for the drag layer's pill to carry its title. */
+    private static TextView pressedRow(View view, android.view.MotionEvent event) {
+        if (!(view instanceof android.view.ViewGroup)) return null;
+        android.view.ViewGroup group = (android.view.ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            android.view.View child = group.getChildAt(i);
+            android.graphics.Rect hit = new android.graphics.Rect();
+            child.getHitRect(hit);
+            if (hit.contains((int) event.getX(), (int) event.getY())) return (TextView) child;
+        }
+        return null;
+    }
+
+    private synchronized void startDrag(View view, String dragTitle, float rawX, float rawY) {
         if (host == null || dragging) return;
         dragging = true;
+        dragTitleText = dragTitle;
         dragX = rawX;
         dragY = rawY;
         try {
@@ -391,7 +458,7 @@ public final class QrPlugin implements KioskPlugin {
                     text.setTypeface(theme.typeface(600));
                     float textX = left + 20 * density;
                     float textY = top + pillH / 2f - (text.descent() + text.ascent()) / 2f;
-                    canvas.drawText(title[0], textX, textY, text);
+                    canvas.drawText(dragTitleText == null ? title[0] : dragTitleText, textX, textY, text);
                     Drawable glyph = icon(theme, icon.isEmpty() ? "mdi:qrcode" : icon, "primary");
                     if (glyph != null) {
                         int g = (int) (24 * density);
