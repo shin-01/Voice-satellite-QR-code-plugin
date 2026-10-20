@@ -55,6 +55,17 @@ public final class QrPluginTest {
         assert widget != null;
         assert OverlaySpec.BOTTOM_LEFT.equals(widget.anchor()) && widget.inset() == 16;
         assert OverlaySpec.FADE.equals(widget.enter()) && widget.touchable();
+        assert widget.offsetX() == 0 && widget.offsetY() == 0;
+
+        // Free placement positions the widget by its saved offset from the center.
+        Map<String, Object> free = settings();
+        free.put("placement", "Free");
+        free.put("widgetX", -120);
+        free.put("widgetY", 60);
+        plugin.configure(free);
+        OverlaySpec floating = host.shown.get("qr_widget");
+        assert floating != null && floating.offsetX() == -120 && floating.offsetY() == 60;
+        assert OverlaySpec.CENTER.equals(floating.anchor()) && floating.inset() == 0;
 
         // Every slot's action opens the same full screen card.
         for (int slot = 1; slot <= 4; slot++) {

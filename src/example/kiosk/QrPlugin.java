@@ -43,6 +43,9 @@ public final class QrPlugin implements KioskPlugin {
     private final String[] title = new String[SLOTS];
     private boolean showWidget = true;
     private String corner = "Top right";
+    private String placement = "Anchored";
+    private int widgetX;
+    private int widgetY;
     private String icon = "mdi:qrcode";
     private double qrSize = 320;
     private int openSlot = -1;
@@ -63,6 +66,10 @@ public final class QrPlugin implements KioskPlugin {
         }
         showWidget = Boolean.TRUE.equals(settings.get("showWidget"));
         corner = string(settings.get("corner"));
+        placement = string(settings.get("placement"));
+        if (placement.isEmpty()) placement = "Anchored";
+        widgetX = dpSetting(settings.get("widgetX"));
+        widgetY = dpSetting(settings.get("widgetY"));
         icon = string(settings.get("icon"));
         Object size = settings.get("qrSize");
         qrSize = size instanceof Number ? ((Number) size).doubleValue() : 320;
@@ -144,8 +151,13 @@ public final class QrPlugin implements KioskPlugin {
             host.status("Set the first QR code's title and content to show the corner widget.", true);
             return;
         }
-        OverlaySpec spec = OverlaySpec.at(anchor(corner))
-            .inset(16)
+        boolean free = "Free".equals(placement);
+        // Anchored sits in the chosen corner; Free carries the pill's center as an
+        // offset from the middle of the kiosk, wherever the last drag left it.
+        OverlaySpec spec = OverlaySpec.at(free ? OverlaySpec.CENTER : anchor(corner));
+        spec = spec.inset(free ? 0 : 16);
+        if (free) spec = spec.offset(widgetX, widgetY);
+        spec = spec
             .enter(OverlaySpec.FADE)
             .exit(OverlaySpec.FADE)
             .transitionDuration(200);
@@ -175,6 +187,11 @@ public final class QrPlugin implements KioskPlugin {
         }
     }
 
+    /** A saved drag position in dp, 0 when never moved. */
+    private static int dpSetting(Object value) {
+        return value instanceof Number ? ((Number) value).intValue() : 0;
+    }
+
     private static String anchor(String corner) {
         if ("Top left".equals(corner)) return OverlaySpec.TOP_LEFT;
         if ("Bottom left".equals(corner)) return OverlaySpec.BOTTOM_LEFT;
@@ -202,15 +219,58 @@ public final class QrPlugin implements KioskPlugin {
 
     /** The corner widget: a KS themed pill with the chosen icon and the first QR code's title. */
     private final class Widget implements OverlayFactory {
+        private static final int MAX_DRAG_SLOPE = 12;
+        private float downX;
+        private float downY;
+        private boolean dragging;
+
         @Override
-        public View create(Context context, KsTheme theme) {
+        public View create(final Context context, KsTheme theme) {
             LinearLayout root = new LinearLayout(context);
             root.setOrientation(LinearLayout.HORIZONTAL);
             root.setGravity(Gravity.CENTER);
             TextView label = new TextView(context);
             label.setText(title[0]);
             root.addView(label);
-            root.setOnClickListener(view -> tap(() -> showCode(0)));
+            // A drag moves the widget anywhere on the kiosk; a plain tap opens the
+            // QR. The touch listener owns the whole stream, so the tap is measured
+            // against the same slop that starts the drag.
+            root.setOnTouchListener((view, event) -> {
+                switch (event.getActionMasked()) {
+                    case android.view.MotionEvent.ACTION_DOWN:
+                        downX = event.getRawX();
+                        downY = event.getRawY();
+                        dragging = false;
+                        return true;
+                    case android.view.MotionEvent.ACTION_MOVE: {
+                        float density = view.getResources().getDisplayMetrics().density;
+                        if (!dragging) {
+                            float moved = Math.max(
+                                Math.abs(event.getRawX() - downX),
+                                Math.abs(event.getRawY() - downY));
+                            if (moved / density > MAX_DRAG_SLOPE) dragging = true;
+                        }
+                        if (dragging) {
+                            // Slide the pill under the finger without rebuilding the
+                            // overlay, which would interrupt the gesture.
+                            view.setTranslationX(view.getTranslationX() + event.getRawX() - downX);
+                            view.setTranslationY(view.getTranslationY() + event.getRawY() - downY);
+                            downX = event.getRawX();
+                            downY = event.getRawY();
+                        }
+                        return true;
+                    }
+                    case android.view.MotionEvent.ACTION_UP:
+                    case android.view.MotionEvent.ACTION_CANCEL: {
+                        boolean wasDragging = dragging;
+                        dragging = false;
+                        if (wasDragging) tap(() -> dropWidget(view));
+                        else tap(() -> showCode(0));
+                        return true;
+                    }
+                }
+                return false;
+            });
             onThemeChanged(root, theme);
             return root;
         }
@@ -229,6 +289,33 @@ public final class QrPlugin implements KioskPlugin {
             label.setCompoundDrawablesRelative(glyph, null, null, null);
             label.setCompoundDrawablePadding(theme.px(10));
         }
+    }
+
+    /**
+     * The finger left the pill somewhere new. Turn the translated view into a
+     * saved free position, persist it and rebuild the overlay there, so the spot
+     * survives settings edits, theme changes and app restarts.
+     */
+    private synchronized void dropWidget(View view) {
+        int[] at = new int[2];
+        view.getLocationOnScreen(at);
+        float density = view.getResources().getDisplayMetrics().density;
+        int screenW = Math.round(view.getResources().getDisplayMetrics().widthPixels / density);
+        int screenH = Math.round(view.getResources().getDisplayMetrics().heightPixels / density);
+        // The pill's center, in dp, relative to the kiosk's center.
+        int centerX = Math.round(at[0] / density + view.getWidth() / 2f / density);
+        int centerY = Math.round(at[1] / density + view.getHeight() / 2f / density);
+        widgetX = Math.max(-screenW / 2, Math.min(screenW / 2, centerX - screenW / 2));
+        widgetY = Math.max(-screenH / 2, Math.min(screenH / 2, centerY - screenH / 2));
+        placement = "Free";
+        try {
+            Map<String, Object> values = new java.util.LinkedHashMap<>();
+            values.put("placement", "Free");
+            values.put("widgetX", widgetX);
+            values.put("widgetY", widgetY);
+            host.updateSettings(values);
+        } catch (UnsupportedOperationException olderHost) {}
+        showWidget();
     }
 
     /** The full screen card: a white QR panel over a dimmed kiosk. */

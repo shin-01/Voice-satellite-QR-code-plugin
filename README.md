@@ -5,8 +5,11 @@ plus up to four QR codes that open through actions you can bind to gestures.
 
 ## What it does
 
-- A themed pill widget sits in the display corner you choose, with an icon and
-  title of your picking. Tapping it opens **QR code 1**.
+- A themed pill widget with an icon and title of your picking. Tapping it opens
+  **QR code 1**; dragging it moves it anywhere on the kiosk.
+- **Anchored** keeps the widget in the corner you pick. **Free** leaves it where
+  you last dragged it, and a drag switches the placement to Free by itself. The
+  dropped spot survives settings edits, theme changes and app restarts.
 - Each of the four QR codes encodes a URL, plain text or Wi-Fi credentials —
   whatever a phone needs to scan.
 - Every QR code has its own **Show QR code N** action: assign it in
@@ -25,7 +28,10 @@ plus up to four QR codes that open through actions you can bind to gestures.
 | Setting | Meaning |
 | --- | --- |
 | Show corner widget | Turn the widget on or off. It opens QR code 1 |
-| Corner, Widget icon | Where the widget sits and its icon |
+| Placement | `Anchored` or `Free`. Dragging the pill switches it to Free |
+| Corner | The anchor corner, shown while Placement is Anchored |
+| Free position X, Free position Y | Kept by the widget when you drag it |
+| Widget icon | The icon on the pill |
 | QR size | The size of the QR in the full screen card, 160 to 480 dp |
 
 Each **QR code 1–4** group has the same content settings:

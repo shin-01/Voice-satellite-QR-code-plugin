@@ -26,13 +26,47 @@
       "description": "Keep the tappable widget, which opens the first QR code, in a display corner."
     },
     {
+      "key": "placement",
+      "type": "select",
+      "title": "Placement",
+      "default": "Anchored",
+      "options": ["Anchored", "Free"],
+      "group": "QR code 1",
+      "description": "Anchored keeps the widget in the corner below. Free leaves it where you last dragged it. Dragging the widget switches this to Free by itself."
+    },
+    {
       "key": "corner",
       "type": "select",
       "title": "Corner",
       "default": "Top right",
       "options": ["Top left", "Top right", "Bottom left", "Bottom right"],
       "group": "QR code 1",
-      "description": "Where the widget sits."
+      "visibleWhen": { "key": "placement", "equals": "Anchored" },
+      "description": "Where the anchored widget sits."
+    },
+    {
+      "key": "widgetX",
+      "type": "number",
+      "title": "Free position X",
+      "default": 0,
+      "min": -4096,
+      "max": 4096,
+      "step": 1,
+      "unit": "dp",
+      "group": "QR code 1",
+      "description": "Kept by the widget when you drag it, relative to the kiosk's center."
+    },
+    {
+      "key": "widgetY",
+      "type": "number",
+      "title": "Free position Y",
+      "default": 0,
+      "min": -4096,
+      "max": 4096,
+      "step": 1,
+      "unit": "dp",
+      "description": "Kept by the widget when you drag it, relative to the kiosk's center.",
+      "group": "QR code 1"
     },
     {
       "key": "icon",
