@@ -3,14 +3,15 @@
   "apiVersion": 1,
   "id": "voice-satellite-qrcode",
   "name": "QR Code",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "minAndroidSdk": 24,
   "entryClass": "example.kiosk.QrPlugin",
-  "description": "A corner widget that opens the first QR code on tap, plus up to four QR codes (URL, text or Wi-Fi credentials) that open through actions bindable to gestures, the kiosk drawer or Home Assistant buttons.",
+  "description": "A pill per QR code, each with its own icon: URL, text or Wi-Fi credentials. Grouped pills share one pill that asks which QR to show; detached pills float on their own and open their QR directly. Every QR also opens through an action bindable to gestures.",
   "author": "shin-01",
   "license": "Apache-2.0 AND MIT",
   "capabilities": ["overlay"],
   "groups": [
+    { "title": "Pills" },
     { "title": "QR code 1" },
     { "title": "QR code 2" },
     { "title": "QR code 3" },
@@ -20,70 +21,53 @@
     {
       "key": "showWidget",
       "type": "boolean",
-      "title": "Show corner widget",
+      "title": "Show pills",
       "default": true,
-      "group": "QR code 1",
-      "description": "Keep the tappable widget, which opens the first QR code, in a display corner."
-    },
-    {
-      "key": "pillMode",
-      "type": "select",
-      "title": "Pill layout",
-      "default": "Grouped",
-      "options": ["Grouped", "Separate"],
-      "group": "QR code 1",
-      "description": "Grouped is one pill with a button per QR code. Separate gives each QR code its own pill, stacked."
+      "group": "Pills",
+      "description": "Turn the QR code pills on or off."
     },
     {
       "key": "placement",
       "type": "select",
-      "title": "Placement",
+      "title": "Group placement",
       "default": "Anchored",
       "options": ["Anchored", "Free"],
-      "group": "QR code 1",
-      "description": "Anchored keeps the widget in the corner below. Free leaves it where you last dragged it. Dragging the widget switches this to Free by itself."
+      "group": "Pills",
+      "description": "Anchored keeps the grouped pill in the corner below. Free leaves it where you last dragged it. Dragging switches this to Free by itself."
     },
     {
       "key": "corner",
       "type": "select",
-      "title": "Corner",
+      "title": "Group corner",
       "default": "Top right",
       "options": ["Top left", "Top right", "Bottom left", "Bottom right"],
-      "group": "QR code 1",
+      "group": "Pills",
       "visibleWhen": { "key": "placement", "equals": "Anchored" },
-      "description": "Where the anchored widget sits."
+      "description": "Where the grouped pill sits."
     },
     {
       "key": "widgetX",
       "type": "number",
-      "title": "Free position X",
+      "title": "Group position X",
       "default": 0,
       "min": -4096,
       "max": 4096,
       "step": 1,
       "unit": "dp",
-      "group": "QR code 1",
-      "description": "Kept by the widget when you drag it, relative to the kiosk's center."
+      "group": "Pills",
+      "description": "Kept by the grouped pill when you drag it, relative to the kiosk's center."
     },
     {
       "key": "widgetY",
       "type": "number",
-      "title": "Free position Y",
+      "title": "Group position Y",
       "default": 0,
       "min": -4096,
       "max": 4096,
       "step": 1,
       "unit": "dp",
-      "description": "Kept by the widget when you drag it, relative to the kiosk's center.",
-      "group": "QR code 1"
-    },
-    {
-      "key": "icon",
-      "type": "icon",
-      "title": "Widget icon",
-      "default": "mdi:qrcode",
-      "group": "QR code 1",
-      "description": "The icon on the corner widget."
+      "group": "Pills",
+      "description": "Kept by the grouped pill when you drag it, relative to the kiosk's center."
     },
     {
       "key": "qrSize",
@@ -94,7 +78,7 @@
       "max": 480,
       "step": 20,
       "unit": "dp",
-      "group": "QR code 1",
+      "group": "Pills",
       "description": "The size of the QR code in the full screen card."
     },
     {
@@ -103,7 +87,48 @@
       "title": "Title",
       "default": "Wi-Fi",
       "group": "QR code 1",
-      "description": "The label on the corner widget and the heading of this QR's card."
+      "description": "The heading of this QR's card and its row in the chooser."
+    },
+    {
+      "key": "qr1Icon",
+      "type": "icon",
+      "title": "Pill icon",
+      "default": "mdi:wifi",
+      "group": "QR code 1",
+      "description": "The icon this QR code's pill shows."
+    },
+    {
+      "key": "qr1Pill",
+      "type": "select",
+      "title": "Pill",
+      "default": "Grouped",
+      "options": ["Grouped", "Detached"],
+      "group": "QR code 1",
+      "description": "Grouped joins the shared pill, which asks which QR to show when it holds several. Detached floats on its own and opens this QR directly."
+    },
+    {
+      "key": "qr1X",
+      "type": "number",
+      "title": "Detached position X",
+      "default": 0,
+      "min": -4096,
+      "max": 4096,
+      "step": 1,
+      "unit": "dp",
+      "group": "QR code 1",
+      "description": "Kept by this pill when you drag it, relative to the kiosk's center."
+    },
+    {
+      "key": "qr1Y",
+      "type": "number",
+      "title": "Detached position Y",
+      "default": 0,
+      "min": -4096,
+      "max": 4096,
+      "step": 1,
+      "unit": "dp",
+      "group": "QR code 1",
+      "description": "Kept by this pill when you drag it, relative to the kiosk's center."
     },
     {
       "key": "qr1Type",
@@ -149,7 +174,7 @@
       "default": "",
       "group": "QR code 1",
       "visibleWhen": { "key": "qr1Type", "equals": "URL" },
-      "description": "The link the QR code opens, such as https://www.kiosksatellite.com/"
+      "description": "The link the QR code opens."
     },
     {
       "key": "qr1Text",
@@ -166,7 +191,48 @@
       "title": "Title",
       "default": "",
       "group": "QR code 2",
-      "description": "The heading of this QR's card."
+      "description": "The heading of this QR's card and its row in the chooser."
+    },
+    {
+      "key": "qr2Icon",
+      "type": "icon",
+      "title": "Pill icon",
+      "default": "mdi:qrcode",
+      "group": "QR code 2",
+      "description": "The icon this QR code's pill shows."
+    },
+    {
+      "key": "qr2Pill",
+      "type": "select",
+      "title": "Pill",
+      "default": "Grouped",
+      "options": ["Grouped", "Detached"],
+      "group": "QR code 2",
+      "description": "Grouped joins the shared pill, which asks which QR to show when it holds several. Detached floats on its own and opens this QR directly."
+    },
+    {
+      "key": "qr2X",
+      "type": "number",
+      "title": "Detached position X",
+      "default": 0,
+      "min": -4096,
+      "max": 4096,
+      "step": 1,
+      "unit": "dp",
+      "group": "QR code 2",
+      "description": "Kept by this pill when you drag it, relative to the kiosk's center."
+    },
+    {
+      "key": "qr2Y",
+      "type": "number",
+      "title": "Detached position Y",
+      "default": 0,
+      "min": -4096,
+      "max": 4096,
+      "step": 1,
+      "unit": "dp",
+      "group": "QR code 2",
+      "description": "Kept by this pill when you drag it, relative to the kiosk's center."
     },
     {
       "key": "qr2Type",
@@ -229,7 +295,48 @@
       "title": "Title",
       "default": "",
       "group": "QR code 3",
-      "description": "The heading of this QR's card."
+      "description": "The heading of this QR's card and its row in the chooser."
+    },
+    {
+      "key": "qr3Icon",
+      "type": "icon",
+      "title": "Pill icon",
+      "default": "mdi:qrcode",
+      "group": "QR code 3",
+      "description": "The icon this QR code's pill shows."
+    },
+    {
+      "key": "qr3Pill",
+      "type": "select",
+      "title": "Pill",
+      "default": "Grouped",
+      "options": ["Grouped", "Detached"],
+      "group": "QR code 3",
+      "description": "Grouped joins the shared pill, which asks which QR to show when it holds several. Detached floats on its own and opens this QR directly."
+    },
+    {
+      "key": "qr3X",
+      "type": "number",
+      "title": "Detached position X",
+      "default": 0,
+      "min": -4096,
+      "max": 4096,
+      "step": 1,
+      "unit": "dp",
+      "group": "QR code 3",
+      "description": "Kept by this pill when you drag it, relative to the kiosk's center."
+    },
+    {
+      "key": "qr3Y",
+      "type": "number",
+      "title": "Detached position Y",
+      "default": 0,
+      "min": -4096,
+      "max": 4096,
+      "step": 1,
+      "unit": "dp",
+      "group": "QR code 3",
+      "description": "Kept by this pill when you drag it, relative to the kiosk's center."
     },
     {
       "key": "qr3Type",
@@ -292,7 +399,48 @@
       "title": "Title",
       "default": "",
       "group": "QR code 4",
-      "description": "The heading of this QR's card."
+      "description": "The heading of this QR's card and its row in the chooser."
+    },
+    {
+      "key": "qr4Icon",
+      "type": "icon",
+      "title": "Pill icon",
+      "default": "mdi:qrcode",
+      "group": "QR code 4",
+      "description": "The icon this QR code's pill shows."
+    },
+    {
+      "key": "qr4Pill",
+      "type": "select",
+      "title": "Pill",
+      "default": "Grouped",
+      "options": ["Grouped", "Detached"],
+      "group": "QR code 4",
+      "description": "Grouped joins the shared pill, which asks which QR to show when it holds several. Detached floats on its own and opens this QR directly."
+    },
+    {
+      "key": "qr4X",
+      "type": "number",
+      "title": "Detached position X",
+      "default": 0,
+      "min": -4096,
+      "max": 4096,
+      "step": 1,
+      "unit": "dp",
+      "group": "QR code 4",
+      "description": "Kept by this pill when you drag it, relative to the kiosk's center."
+    },
+    {
+      "key": "qr4Y",
+      "type": "number",
+      "title": "Detached position Y",
+      "default": 0,
+      "min": -4096,
+      "max": 4096,
+      "step": 1,
+      "unit": "dp",
+      "group": "QR code 4",
+      "description": "Kept by this pill when you drag it, relative to the kiosk's center."
     },
     {
       "key": "qr4Type",

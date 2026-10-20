@@ -1,51 +1,46 @@
 # QR Code (Kiosk Satellite plugin)
 
-A small corner widget that opens the first QR code full screen when tapped,
-plus up to four QR codes that open through actions you can bind to gestures.
+A pill per QR code, each with its own icon. Grouped pills share one pill; a
+detached pill floats on its own. Every QR encodes a URL, plain text or Wi-Fi
+credentials — whatever a phone needs to scan.
 
 ## What it does
 
-- A themed pill for every QR code you configure. **Grouped** stacks one pill with
-  a button per QR code; **Separate** gives each QR code its own pill. Tapping a
-  button or pill opens that QR; dragging moves the whole stack anywhere on the
-  kiosk.
-- **Anchored** keeps the widget in the corner you pick. **Free** leaves it where
-  you last dragged it, and a drag switches the placement to Free by itself. The
-  dropped spot survives settings edits, theme changes and app restarts.
-- Each of the four QR codes encodes a URL, plain text or Wi-Fi credentials —
-  whatever a phone needs to scan.
-- Every QR code has its own **Show QR code N** action: assign it in
+- Every QR code gets a **pill with an icon of your choosing** — no title on the
+  pill. The QR's title appears in its full screen card.
+- **Grouped** pills share one pill that carries an icon per QR code. Tapping it
+  with several QR codes inside first asks **which to show, in a modal** with a
+  row per QR; with a single QR code it opens it directly.
+- **Detached** pills float on their own, each in its own corner until you drag
+  it anywhere. Tapping a detached pill opens its QR directly.
+- Dragging a pill moves it (or the whole group) anywhere on the kiosk; the spot
+  survives settings edits, theme changes and app restarts.
+- Every QR code also has its own **Show QR code N** action: assign it in
   **Gestures > Run a plugin action**, keep it in the kiosk drawer or expose it
   as a Home Assistant button from the plugin subpage.
-- The card closes on a tap outside, on the **Close** button or with Back.
-
-> The screensaver's stock corner widgets are a Kiosk Satellite surface with no
-> plugin API, so a QR cannot become a screensaver widget. The gestures binding
-> is the supported path: any gesture can open any of the four QR codes.
 
 ## Settings
 
-**QR code 1** also carries the corner widget options:
+**Pills** covers the group:
 
 | Setting | Meaning |
 | --- | --- |
-| Show corner widget | Turn the pills on or off |
-| Pill layout | `Grouped`, one pill with a button per QR code, or `Separate`, one pill per QR code |
-| Placement | `Anchored` or `Free`. Dragging the pills switches it to Free |
-| Corner | The anchor corner, shown while Placement is Anchored |
-| Free position X, Free position Y | Kept by the widget when you drag it |
-| Widget icon | The icon on the pill |
+| Show pills | Turn the pills on or off |
+| Group placement | `Anchored` to the corner below, or `Free` where you last dragged the group |
+| Group corner | The anchor corner while placement is Anchored |
 | QR size | The size of the QR in the full screen card, 160 to 480 dp |
 
-Each **QR code 1–4** group has the same content settings:
+Each **QR code 1–4** group has the same settings:
 
 | Setting | Meaning |
 | --- | --- |
-| Title | The heading of that QR's card |
+| Title | The heading of that QR's card and its row in the chooser |
+| Pill icon | The icon this QR code's pill shows |
+| Pill | `Grouped` or `Detached` |
+| Detached position X, Y | Kept by the pill when you drag it |
 | Content type | `Wi-Fi`, `URL` or `Text` |
 | Network name (SSID), Security, Password | Shown for `Wi-Fi`. The password is masked |
-| URL | Shown for `URL` |
-| Text | Shown for `Text` |
+| URL / Text | Shown for `URL` / `Text` |
 
 For Wi-Fi the plugin builds the standard join string that Android and iOS
 cameras read, escaping special characters for you:
@@ -60,7 +55,7 @@ Open networks use `T:nopass` and carry no password.
 
 | Action | Opens |
 | --- | --- |
-| Show QR code 1 | The first QR code, the same one the widget opens |
+| Show QR code 1 | The first QR code |
 | Show QR code 2 | The second QR code |
 | Show QR code 3 | The third QR code |
 | Show QR code 4 | The fourth QR code |

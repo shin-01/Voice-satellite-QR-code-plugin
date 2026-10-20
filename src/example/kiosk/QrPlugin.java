@@ -6,16 +6,21 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import io.nayuki.qrcodegen.QrCode;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import me.jxl.kiosk.plugins.KioskPlugin;
 import me.jxl.kiosk.plugins.KsTheme;
@@ -24,37 +29,44 @@ import me.jxl.kiosk.plugins.OverlaySpec;
 import me.jxl.kiosk.plugins.PluginHost;
 
 /**
- * A small corner widget that shows the primary QR code on tap, plus up to four
- * QR codes that open through plugin actions users bind to gestures, the kiosk
- * drawer or Home Assistant buttons. Each QR encodes a URL, plain text or Wi-Fi
- * credentials. The screensaver's stock corner widgets are a Kiosk Satellite
- * surface the plugin SDK cannot add to, so these QR codes live in the plugin's
- * own overlays. QR rendering uses Nayuki's MIT licensed generator
- * (io.nayuki.qrcodegen), bundled with this plugin.
+ * A pill per QR code, each with its own icon. Grouped pills share one overlay;
+ * a detached pill floats on its own, anchored to its corner or dragged
+ * anywhere. Tapping a group of several QR codes first asks which to show, in a
+ * modal; tapping a single pill or a detached pill opens its QR code directly.
+ * QR rendering uses Nayuki's MIT licensed generator (io.nayuki.qrcodegen),
+ * bundled with this plugin.
  */
 public final class QrPlugin implements KioskPlugin {
-    /** The slots, in manifest order. Slot 1 also backs the corner widget. */
     private static final int SLOTS = 4;
-    private static final String WIDGET = "qr_widget";
+    /** The one pill that holds every grouped QR code. */
+    private static final String GROUP = "qr_group";
     private static final String CODE = "qr_code";
     /** Full screen, visual only: carries the pill during a drag, so it is never clipped. */
     private static final String DRAG = "qr_drag";
+    /** One overlay per detached pill: qr_pill_1 to qr_pill_4. */
+    private static final String PILL = "qr_pill_";
 
     private PluginHost host;
     private final String[] content = new String[SLOTS];
     private final String[] title = new String[SLOTS];
+    private final String[] pillIcon = new String[SLOTS];
+    private final boolean[] detached = new boolean[SLOTS];
+    /** A detached pill's saved drag position, in dp from the kiosk's center. */
+    private final int[] pillX = new int[SLOTS];
+    private final int[] pillY = new int[SLOTS];
+    private final boolean[] pillFree = new boolean[SLOTS];
     private boolean showWidget = true;
-    /** One pill with a button per QR code, or one pill per QR code. */
-    private String pillMode = "Grouped";
     private String corner = "Top right";
     private String placement = "Anchored";
     private int widgetX;
     private int widgetY;
-    private String icon = "mdi:qrcode";
     private double qrSize = 320;
+    /** The open card's slot, -1 for none and -2 for the chooser. */
     private int openSlot = -1;
-    /** The finger's raw position while dragging, with the screen's px and dp sizes. */
+    /** The drag's target: -1 for the group, otherwise a slot index. */
     private boolean dragging;
+    private int dragTarget = -1;
+    private String dragIcon = "mdi:qrcode";
     private float dragX;
     private float dragY;
     private float dragDensity;
@@ -62,8 +74,6 @@ public final class QrPlugin implements KioskPlugin {
     private float dragScreenH;
     /** The live drag layer view, invalidated as the finger moves. */
     private View dragLayerView;
-    /** The row title the drag layer carries. */
-    private String dragTitleText;
 
     @Override
     public synchronized void start(PluginHost host, Map<String, Object> settings) {
@@ -77,26 +87,26 @@ public final class QrPlugin implements KioskPlugin {
         for (int slot = 0; slot < SLOTS; slot++) {
             String prefix = "qr" + (slot + 1);
             title[slot] = string(settings.get(prefix + "Title"));
+            pillIcon[slot] = string(settings.get(prefix + "Icon"));
+            if (pillIcon[slot].isEmpty()) pillIcon[slot] = "mdi:qrcode";
+            detached[slot] = "Detached".equals(string(settings.get(prefix + "Pill")));
+            pillX[slot] = dpSetting(settings.get(prefix + "X"));
+            pillY[slot] = dpSetting(settings.get(prefix + "Y"));
+            // A pill with a saved position is free; a drag back to the exact center re-anchors it.
+            pillFree[slot] = pillX[slot] != 0 || pillY[slot] != 0;
             content[slot] = buildContent(settings, prefix);
         }
         showWidget = Boolean.TRUE.equals(settings.get("showWidget"));
-        pillMode = string(settings.get("pillMode"));
-        if (pillMode.isEmpty()) pillMode = "Grouped";
         corner = string(settings.get("corner"));
         placement = string(settings.get("placement"));
         if (placement.isEmpty()) placement = "Anchored";
         widgetX = dpSetting(settings.get("widgetX"));
         widgetY = dpSetting(settings.get("widgetY"));
-        icon = string(settings.get("icon"));
         Object size = settings.get("qrSize");
         qrSize = size instanceof Number ? ((Number) size).doubleValue() : 320;
         if (host == null) return;
-        if (showWidget) showWidget();
-        else {
-            try {
-                host.hideOverlay(WIDGET);
-            } catch (UnsupportedOperationException olderHost) {}
-        }
+        if (showWidget) applyPills();
+        else hidePills();
         // A settings edit refreshes the open card so it never shows a stale code.
         if (openSlot >= 0 && !content[openSlot].equals(previous[openSlot])) showCode(openSlot);
     }
@@ -134,6 +144,11 @@ public final class QrPlugin implements KioskPlugin {
         return value.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace(":", "\\:").replace("\"", "\\\"");
     }
 
+    /** A saved drag position in dp, 0 when never moved. */
+    private static int dpSetting(Object value) {
+        return value instanceof Number ? ((Number) value).intValue() : 0;
+    }
+
     /**
      * The four Show QR code actions, one per slot. Users bind them to gestures
      * in Gestures > Run a plugin action, and can also keep them in the kiosk
@@ -151,7 +166,10 @@ public final class QrPlugin implements KioskPlugin {
 
     @Override
     public synchronized void onEvent(String event, Map<String, Object> payload) {
-        if ("overlay.closed".equals(event) && payload != null && CODE.equals(payload.get("key"))) openSlot = -1;
+        if ("overlay.closed".equals(event) && payload != null && CODE.equals(payload.get("key"))) {
+            openSlot = -1;
+            if (showWidget && !dragging) applyPills();
+        }
     }
 
     @Override
@@ -161,31 +179,54 @@ public final class QrPlugin implements KioskPlugin {
 
     /** The QR codes that have both a title and content, in slot order. */
     private int[] activeSlots() {
-        int count = 0;
+        List<Integer> active = new ArrayList<>();
         for (int slot = 0; slot < SLOTS; slot++) {
-            if (!title[slot].isEmpty() && !content[slot].isEmpty()) count++;
+            if (!title[slot].isEmpty() && !content[slot].isEmpty()) active.add(slot);
         }
-        int[] active = new int[count];
-        int next = 0;
-        for (int slot = 0; slot < SLOTS; slot++) {
-            if (!title[slot].isEmpty() && !content[slot].isEmpty()) active[next++] = slot;
-        }
-        return active;
+        int[] out = new int[active.size()];
+        for (int i = 0; i < out.length; i++) out[i] = active.get(i);
+        return out;
     }
 
-    private synchronized void showWidget() {
+    /** Show or hide every pill to match the settings. */
+    private synchronized void applyPills() {
         if (host == null) return;
         int[] active = activeSlots();
-        if (active.length == 0) {
-            try {
-                host.hideOverlay(WIDGET);
-            } catch (UnsupportedOperationException olderHost) {}
-            host.status("Give a QR code both a title and content to show the pill.", true);
-            return;
+        List<Integer> grouped = new ArrayList<>();
+        for (int slot : active) {
+            if (!detached[slot]) grouped.add(slot);
         }
+        if (!grouped.isEmpty()) {
+            int[] slots = new int[grouped.size()];
+            for (int i = 0; i < slots.length; i++) slots[i] = grouped.get(i);
+            showGroup(slots);
+        } else {
+            hide(GROUP);
+        }
+        for (int slot = 0; slot < SLOTS; slot++) {
+            if (showWidget && detached[slot] && !title[slot].isEmpty() && !content[slot].isEmpty()) showPill(slot);
+            else hide(PILL + (slot + 1));
+        }
+        if (active.length == 0 && !grouped.isEmpty()) hide(GROUP);
+        if (active.length == 0) {
+            // Nothing to show yet; the group factory handles an empty list by hiding.
+        }
+    }
+
+    private synchronized void hidePills() {
+        hide(GROUP);
+        for (int slot = 1; slot <= SLOTS; slot++) hide(PILL + slot);
+    }
+
+    private void hide(String key) {
+        try {
+            host.hideOverlay(key);
+        } catch (UnsupportedOperationException olderHost) {}
+    }
+
+    /** The one group pill: a card with one icon per grouped QR code. */
+    private synchronized void showGroup(int[] grouped) {
         boolean free = "Free".equals(placement);
-        // Anchored sits in the chosen corner; Free carries the pill's center as an
-        // offset from the middle of the kiosk, wherever the last drag left it.
         OverlaySpec spec = OverlaySpec.at(free ? OverlaySpec.CENTER : anchor(corner));
         spec = spec.inset(free ? 0 : 16);
         if (free) spec = spec.offset(widgetX, widgetY);
@@ -194,9 +235,36 @@ public final class QrPlugin implements KioskPlugin {
             .exit(OverlaySpec.FADE)
             .transitionDuration(200);
         try {
-            host.showOverlay(WIDGET, spec, new Widget(active));
+            host.showOverlay(GROUP, spec, new GroupPill(grouped));
         } catch (UnsupportedOperationException olderHost) {
             host.status("Native overlays need a newer Kiosk Satellite.", true);
+        }
+    }
+
+    /** A detached pill: one icon, on its own overlay. */
+    private synchronized void showPill(int slot) {
+        boolean free = pillFree[slot];
+        OverlaySpec spec = OverlaySpec.at(free ? OverlaySpec.CENTER : pillAnchor(slot));
+        spec = spec.inset(free ? 0 : 16);
+        if (free) spec = spec.offset(pillX[slot], pillY[slot]);
+        spec = spec
+            .enter(OverlaySpec.FADE)
+            .exit(OverlaySpec.FADE)
+            .transitionDuration(200);
+        try {
+            host.showOverlay(PILL + (slot + 1), spec, new IconPill(slot));
+        } catch (UnsupportedOperationException olderHost) {
+            host.status("Native overlays need a newer Kiosk Satellite.", true);
+        }
+    }
+
+    /** Each detached pill keeps its own corner until it is dragged. */
+    private static String pillAnchor(int slot) {
+        switch (slot) {
+            case 0: return OverlaySpec.TOP_LEFT;
+            case 1: return OverlaySpec.TOP_RIGHT;
+            case 2: return OverlaySpec.BOTTOM_LEFT;
+            default: return OverlaySpec.BOTTOM_RIGHT;
         }
     }
 
@@ -206,6 +274,8 @@ public final class QrPlugin implements KioskPlugin {
             host.status("QR code " + (slot + 1) + " has no content. Set it in the plugin settings.", true);
             return;
         }
+        // The card takes the pills' overlay slots; closing it brings them back.
+        hidePills();
         openSlot = slot;
         OverlaySpec spec = OverlaySpec.fullScreen()
             .closeOnOutsideTouch(true)
@@ -219,9 +289,20 @@ public final class QrPlugin implements KioskPlugin {
         }
     }
 
-    /** A saved drag position in dp, 0 when never moved. */
-    private static int dpSetting(Object value) {
-        return value instanceof Number ? ((Number) value).intValue() : 0;
+    /** The modal that asks which grouped QR code to show. */
+    private synchronized void showChooser(int[] grouped) {
+        hidePills();
+        openSlot = -2;
+        OverlaySpec spec = OverlaySpec.fullScreen()
+            .closeOnOutsideTouch(true)
+            .enter(OverlaySpec.FADE)
+            .exit(OverlaySpec.FADE)
+            .transitionDuration(200);
+        try {
+            host.showOverlay(CODE, spec, new Chooser(grouped));
+        } catch (UnsupportedOperationException olderHost) {
+            host.status("Native overlays need a newer Kiosk Satellite.", true);
+        }
     }
 
     private static String anchor(String corner) {
@@ -250,136 +331,80 @@ public final class QrPlugin implements KioskPlugin {
     }
 
     /**
-     * The corner pill. Grouped is one pill with a button per active QR code;
-     * Separate stacks one pill per QR code. Either way the whole stack is one
-     * overlay, so dragging moves it together and a tap opens that QR's card.
+     * The touch stream of a pill. A drag moves it anywhere on the kiosk; a
+     * plain tap opens its QR code, or the chooser when the group holds more
+     * than one. The listener owns the whole stream: returning false on DOWN
+     * would hand it to a child and the drag would never start.
      */
-    private final class Widget implements OverlayFactory {
-        private static final int MAX_DRAG_SLOPE = 12;
-        private final int[] active;
-        private float downX;
-        private float downY;
-        private float moved;
+    private View.OnTouchListener pillTouch(final int target, final int[] tapSlots) {
+        return new View.OnTouchListener() {
+            private float downX;
+            private float downY;
 
-        Widget(int[] active) {
-            this.active = active;
-        }
-
-        @Override
-        public View create(final Context context, KsTheme theme) {
-            boolean grouped = "Grouped".equals(pillMode);
-            LinearLayout root = new LinearLayout(context);
-            root.setOrientation(grouped ? LinearLayout.VERTICAL : LinearLayout.VERTICAL);
-            root.setGravity(Gravity.CENTER_HORIZONTAL);
-            for (int i = 0; i < active.length; i++) {
-                final int slot = active[i];
-                TextView label = new TextView(context);
-                label.setText(title[slot]);
-                label.setGravity(Gravity.CENTER);
-                label.setOnClickListener(view -> tap(() -> showCode(slot)));
-                root.addView(label, new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-            }
-            // A drag moves the whole stack anywhere on the kiosk. The touch
-            // listener owns the stream, so taps still reach the row buttons.
-            root.setOnTouchListener((view, event) -> {
+            @Override
+            public boolean onTouch(View view, MotionEvent event) {
                 switch (event.getActionMasked()) {
-                    case android.view.MotionEvent.ACTION_DOWN:
+                    case MotionEvent.ACTION_DOWN:
                         downX = event.getRawX();
                         downY = event.getRawY();
-                        moved = 0;
-                        return false;
-                    case android.view.MotionEvent.ACTION_MOVE: {
+                        return true;
+                    case MotionEvent.ACTION_MOVE: {
                         float density = view.getResources().getDisplayMetrics().density;
                         if (!dragging) {
-                            moved = Math.max(moved, Math.max(
+                            float moved = Math.max(
                                 Math.abs(event.getRawX() - downX),
-                                Math.abs(event.getRawY() - downY)));
-                            if (moved / density > MAX_DRAG_SLOPE) {
-                                dragDensity = density;
-                                dragScreenW = view.getResources().getDisplayMetrics().widthPixels;
-                                dragScreenH = view.getResources().getDisplayMetrics().heightPixels;
-                                final TextView pressed = pressedRow(view, event);
-                                tap(() -> startDrag(view, pressed == null ? title[0] : pressed.getText().toString(), event.getRawX(), event.getRawY()));
+                                Math.abs(event.getRawY() - downY));
+                            if (moved / density > 12) {
+                                tap(() -> startDrag(view, target, event.getRawX(), event.getRawY()));
                             }
                         }
                         if (dragging) tap(() -> moveDrag(event.getRawX(), event.getRawY()));
-                        return dragging;
+                        return true;
                     }
-                    case android.view.MotionEvent.ACTION_UP:
-                    case android.view.MotionEvent.ACTION_CANCEL: {
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL: {
                         boolean wasDragging = dragging;
                         dragging = false;
                         if (wasDragging) tap(QrPlugin.this::dropWidget);
-                        return wasDragging;
+                        else if (event.getActionMasked() == MotionEvent.ACTION_UP) {
+                            if (tapSlots.length == 1) tap(() -> showCode(tapSlots[0]));
+                            else if (tapSlots.length > 1) tap(() -> showChooser(tapSlots));
+                        }
+                        return true;
                     }
                 }
                 return false;
-            });
-            onThemeChanged(root, theme);
-            return root;
-        }
-
-        @Override
-        public void onThemeChanged(View view, KsTheme theme) {
-            LinearLayout root = (LinearLayout) view;
-            boolean grouped = "Grouped".equals(pillMode);
-            if (grouped) {
-                GradientDrawable pill = theme.card();
-                pill.setCornerRadius(theme.px(100));
-                root.setBackground(pill);
-                root.setPadding(theme.px(20), theme.px(12), theme.px(20), theme.px(12));
-            } else {
-                // Separate: the stack itself is transparent, each row is its own pill.
-                root.setBackground(null);
-                root.setPadding(0, 0, 0, 0);
             }
-            for (int i = 0; i < root.getChildCount(); i++) {
-                TextView label = (TextView) root.getChildAt(i);
-                LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) label.getLayoutParams();
-                params.topMargin = grouped && i > 0 ? theme.px(6) : (i > 0 ? theme.px(8) : 0);
-                label.setLayoutParams(params);
-                theme.styleText(label, 15, 600, "onSurface");
-                if (!grouped) {
-                    GradientDrawable own = theme.card();
-                    own.setCornerRadius(theme.px(100));
-                    label.setBackground(own);
-                }
-                Drawable glyph = icon(theme, icon.isEmpty() ? "mdi:qrcode" : icon, "primary");
-                if (glyph != null) glyph.setBounds(0, 0, theme.px(24), theme.px(24));
-                label.setCompoundDrawablesRelative(glyph, null, null, null);
-                label.setCompoundDrawablePadding(theme.px(10));
-                label.setPadding(theme.px(12), theme.px(8), theme.px(12), theme.px(8));
-            }
-        }
+        };
     }
 
     /**
      * KS clips an overlay's view to the overlay's own rectangle, so a pill
-     * translated out of its corner disappears. The drag instead hands the pill
-     * to a full screen, visual-only layer that follows the finger everywhere.
-     * The widget's view stays alive and keeps the touch stream, its own pill
-     * hidden, until the release rebuilds the widget at the new spot.
+     * translated out of its bounds would disappear. The drag instead hides
+     * the other pills to stay within the overlay limit, hands this one to a
+     * full screen, visual-only layer that follows the finger everywhere, and
+     * keeps the pill's own view alive with the touch stream, its content
+     * transparent, until the release rebuilds it at the new spot.
      */
-    /** The row under the finger, for the drag layer's pill to carry its title. */
-    private static TextView pressedRow(View view, android.view.MotionEvent event) {
-        if (!(view instanceof android.view.ViewGroup)) return null;
-        android.view.ViewGroup group = (android.view.ViewGroup) view;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            android.view.View child = group.getChildAt(i);
-            android.graphics.Rect hit = new android.graphics.Rect();
-            child.getHitRect(hit);
-            if (hit.contains((int) event.getX(), (int) event.getY())) return (TextView) child;
-        }
-        return null;
-    }
-
-    private synchronized void startDrag(View view, String dragTitle, float rawX, float rawY) {
+    private synchronized void startDrag(View view, int target, float rawX, float rawY) {
         if (host == null || dragging) return;
         dragging = true;
-        dragTitleText = dragTitle;
+        dragTarget = target;
+        dragIcon = target >= 0 ? pillIcon[target] : pillIcon[0];
         dragX = rawX;
         dragY = rawY;
+        dragDensity = view.getResources().getDisplayMetrics().density;
+        dragScreenW = view.getResources().getDisplayMetrics().widthPixels;
+        dragScreenH = view.getResources().getDisplayMetrics().heightPixels;
+        // The layer needs an overlay slot of its own, so the other pills step aside.
+        if (target >= 0) {
+            hide(GROUP);
+            for (int slot = 0; slot < SLOTS; slot++) {
+                if (slot != target) hide(PILL + (slot + 1));
+            }
+        } else {
+            for (int slot = 1; slot <= SLOTS; slot++) hide(PILL + slot);
+        }
         try {
             host.showOverlay(DRAG, OverlaySpec.fullScreen().touchable(false), new DragLayer());
             view.setAlpha(0);
@@ -398,41 +423,126 @@ public final class QrPlugin implements KioskPlugin {
 
     /**
      * The finger left the pill somewhere new. Turn the drop point into a saved
-     * free position, persist it and rebuild the widget overlay there, so the spot
-     * survives settings edits, theme changes and app restarts.
+     * free position, persist it and rebuild the pills, so the spot survives
+     * settings edits, theme changes and app restarts.
      */
     private synchronized void dropWidget() {
         if (!dragging) return;
         dragging = false;
-        try {
-            host.hideOverlay(DRAG);
-        } catch (UnsupportedOperationException olderHost) {}
-        float density = dragDensity;
-        int screenW = Math.round(dragScreenW);
-        int screenH = Math.round(dragScreenH);
-        if (density <= 0) return;
-        // The pill's center at the drop, in dp, relative to the kiosk's center.
-        int centerX = Math.round(dragX / density);
-        int centerY = Math.round(dragY / density);
-        widgetX = Math.max(-screenW / 2, Math.min(screenW / 2, centerX - screenW / 2));
-        widgetY = Math.max(-screenH / 2, Math.min(screenH / 2, centerY - screenH / 2));
-        placement = "Free";
         dragLayerView = null;
+        hide(DRAG);
+        int target = dragTarget;
+        dragTarget = -1;
+        if (dragDensity <= 0) return;
+        int screenW = Math.round(dragScreenW / dragDensity);
+        int screenH = Math.round(dragScreenH / dragDensity);
+        // The pill's center at the drop, in dp, relative to the kiosk's center.
+        int centerX = Math.round(dragX / dragDensity);
+        int centerY = Math.round(dragY / dragDensity);
+        int x = Math.max(-screenW / 2, Math.min(screenW / 2, centerX - screenW / 2));
+        int y = Math.max(-screenH / 2, Math.min(screenH / 2, centerY - screenH / 2));
         try {
             Map<String, Object> values = new java.util.LinkedHashMap<>();
-            values.put("placement", "Free");
-            values.put("widgetX", widgetX);
-            values.put("widgetY", widgetY);
+            if (target >= 0) {
+                pillFree[target] = true;
+                pillX[target] = x;
+                pillY[target] = y;
+                values.put("qr" + (target + 1) + "X", x);
+                values.put("qr" + (target + 1) + "Y", y);
+            } else {
+                placement = "Free";
+                widgetX = x;
+                widgetY = y;
+                values.put("placement", "Free");
+                values.put("widgetX", x);
+                values.put("widgetY", y);
+            }
             host.updateSettings(values);
         } catch (UnsupportedOperationException olderHost) {}
-        showWidget();
+        if (showWidget) applyPills();
+    }
+
+    /** An icon on the pill grid: a TextView that carries only its drawable. */
+    private TextView iconView(Context context, KsTheme theme, String name) {
+        TextView icon = new TextView(context);
+        Drawable glyph = icon(theme, name, "primary");
+        if (glyph != null) glyph.setBounds(0, 0, theme.px(24), theme.px(24));
+        icon.setCompoundDrawablesRelative(glyph, null, null, null);
+        icon.setGravity(Gravity.CENTER);
+        return icon;
+    }
+
+    /** The group pill: one card carrying an icon per grouped QR code. */
+    private final class GroupPill implements OverlayFactory {
+        private final int[] slots;
+
+        GroupPill(int[] slots) {
+            this.slots = slots;
+        }
+
+        @Override
+        public View create(Context context, KsTheme theme) {
+            LinearLayout root = new LinearLayout(context);
+            root.setOrientation(LinearLayout.HORIZONTAL);
+            root.setGravity(Gravity.CENTER);
+            for (int slot : slots) root.addView(iconView(context, theme, pillIcon[slot]));
+            root.setOnTouchListener(pillTouch(-1, slots));
+            onThemeChanged(root, theme);
+            return root;
+        }
+
+        @Override
+        public void onThemeChanged(View view, KsTheme theme) {
+            LinearLayout root = (LinearLayout) view;
+            GradientDrawable pill = theme.card();
+            pill.setCornerRadius(theme.px(100));
+            root.setBackground(pill);
+            root.setPadding(theme.px(16), theme.px(12), theme.px(16), theme.px(12));
+            for (int i = 0; i < root.getChildCount(); i++) {
+                TextView icon = (TextView) root.getChildAt(i);
+                icon.setMinWidth(theme.px(32));
+                icon.setMinHeight(theme.px(24));
+            }
+        }
+    }
+
+    /** A detached pill: one icon on its own card. */
+    private final class IconPill implements OverlayFactory {
+        private final int slot;
+
+        IconPill(int slot) {
+            this.slot = slot;
+        }
+
+        @Override
+        public View create(Context context, KsTheme theme) {
+            LinearLayout root = new LinearLayout(context);
+            root.setOrientation(LinearLayout.HORIZONTAL);
+            root.setGravity(Gravity.CENTER);
+            root.addView(iconView(context, theme, pillIcon[slot]));
+            root.setOnTouchListener(pillTouch(slot, new int[] {slot}));
+            onThemeChanged(root, theme);
+            return root;
+        }
+
+        @Override
+        public void onThemeChanged(View view, KsTheme theme) {
+            LinearLayout root = (LinearLayout) view;
+            GradientDrawable pill = theme.card();
+            pill.setCornerRadius(theme.px(100));
+            root.setBackground(pill);
+            root.setPadding(theme.px(16), theme.px(12), theme.px(16), theme.px(12));
+            TextView icon = (TextView) root.getChildAt(0);
+            icon.setMinWidth(theme.px(32));
+            icon.setMinHeight(theme.px(24));
+        }
     }
 
     /**
      * The full screen, visual-only layer a drag draws on. It paints the pill at
-     * the finger, in the same KS style, so the drag is visible everywhere without
-     * the widget's clipping. Touches pass through to nothing: the widget's own
-     * view still owns the gesture.
+     * the finger, in the same KS style, so the drag is visible everywhere
+     * without the pill's clipping. Touches pass through: the pill's own view
+     * still owns the gesture.
      */
     private final class DragLayer implements OverlayFactory {
         @Override
@@ -441,28 +551,20 @@ public final class QrPlugin implements KioskPlugin {
                 @Override
                 protected void onDraw(Canvas canvas) {
                     float density = getResources().getDisplayMetrics().density;
-                    // A pill the size of the widget's, centered on the finger.
-                    int pillW = (int) (140 * density);
-                    int pillH = (int) (44 * density);
+                    // A pill the size of the icon's, centered on the finger.
+                    int pillW = (int) (56 * density);
+                    int pillH = (int) (48 * density);
                     float left = dragX - pillW / 2f;
                     float top = dragY - pillH / 2f;
-                    android.graphics.RectF bounds = new android.graphics.RectF(left, top, left + pillW, top + pillH);
                     GradientDrawable pill = theme.card();
                     pill.setCornerRadius(theme.px(100));
                     pill.setBounds((int) left, (int) top, (int) (left + pillW), (int) (top + pillH));
                     pill.draw(canvas);
-                    // The title, next to a small qrcode glyph.
-                    android.text.TextPaint text = new android.text.TextPaint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-                    text.setColor(theme.color("onSurface"));
-                    text.setTextSize(15 * density);
-                    text.setTypeface(theme.typeface(600));
-                    float textX = left + 20 * density;
-                    float textY = top + pillH / 2f - (text.descent() + text.ascent()) / 2f;
-                    canvas.drawText(dragTitleText == null ? title[0] : dragTitleText, textX, textY, text);
-                    Drawable glyph = icon(theme, icon.isEmpty() ? "mdi:qrcode" : icon, "primary");
+                    Drawable glyph = icon(theme, dragIcon, "primary");
                     if (glyph != null) {
                         int g = (int) (24 * density);
-                        glyph.setBounds((int) (left + pillW - 20 * density - g), (int) (top + pillH / 2f - g / 2f), (int) (left + pillW - 20 * density), (int) (top + pillH / 2f + g / 2f));
+                        glyph.setBounds((int) (left + pillW / 2f - g / 2f), (int) (top + pillH / 2f - g / 2f),
+                            (int) (left + pillW / 2f + g / 2f), (int) (top + pillH / 2f + g / 2f));
                         glyph.draw(canvas);
                     }
                 }
@@ -474,6 +576,63 @@ public final class QrPlugin implements KioskPlugin {
         @Override
         public void onThemeChanged(View view, KsTheme theme) {
             view.invalidate();
+        }
+    }
+
+    /** The modal that asks which grouped QR code to show. */
+    private final class Chooser implements OverlayFactory {
+        private final int[] slots;
+
+        Chooser(int[] slots) {
+            this.slots = slots;
+        }
+
+        @Override
+        public View create(Context context, KsTheme theme) {
+            FrameLayout root = new FrameLayout(context);
+            root.setOnClickListener(view -> tap(() -> {
+                if (host != null) host.hideOverlay(CODE);
+            }));
+            LinearLayout card = new LinearLayout(context);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setClickable(true);
+            TextView heading = new TextView(context);
+            heading.setText("Show QR code");
+            heading.setGravity(Gravity.CENTER);
+            card.addView(heading);
+            for (int slot : slots) {
+                TextView row = new TextView(context);
+                row.setText(title[slot]);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setMinHeight(theme.px(48));
+                Drawable glyph = icon(theme, pillIcon[slot], "primary");
+                if (glyph != null) glyph.setBounds(0, 0, theme.px(24), theme.px(24));
+                row.setCompoundDrawablesRelative(glyph, null, null, null);
+                row.setCompoundDrawablePadding(theme.px(14));
+                final int picked = slot;
+                row.setOnClickListener(view -> tap(() -> showCode(picked)));
+                card.addView(row);
+            }
+            int width = Math.min(theme.px(420),
+                context.getResources().getDisplayMetrics().widthPixels - theme.px(48));
+            root.addView(card, new FrameLayout.LayoutParams(width,
+                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
+            onThemeChanged(root, theme);
+            return root;
+        }
+
+        @Override
+        public void onThemeChanged(View view, KsTheme theme) {
+            FrameLayout root = (FrameLayout) view;
+            root.setBackgroundColor(Color.argb(160, 0, 0, 0));
+            LinearLayout card = (LinearLayout) root.getChildAt(0);
+            card.setBackground(theme.card());
+            card.setPadding(theme.px(theme.inset()), theme.px(theme.inset()),
+                theme.px(theme.inset()), theme.px(theme.inset()));
+            theme.styleText((TextView) card.getChildAt(0), 20, 600, "onSurface");
+            for (int i = 1; i < card.getChildCount(); i++) {
+                theme.styleText((TextView) card.getChildAt(i), 16, 500, "onSurface");
+            }
         }
     }
 
@@ -516,9 +675,8 @@ public final class QrPlugin implements KioskPlugin {
             card.addView(close, closeParams);
             int width = Math.min(theme.px(420),
                 context.getResources().getDisplayMetrics().widthPixels - theme.px(48));
-            FrameLayout.LayoutParams cardParams =
-                new FrameLayout.LayoutParams(width, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
-            root.addView(card, cardParams);
+            root.addView(card, new FrameLayout.LayoutParams(width,
+                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
             onThemeChanged(root, theme);
             return root;
         }
