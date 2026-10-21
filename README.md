@@ -17,13 +17,12 @@ credentials — whatever a phone needs to scan.
 - **Tap an icon** to open that QR code full screen; tap the chevron to collapse
   the bar. Collapsed, only the **arrow handle** stays, and tapping it brings the
   bar back.
-- **Drag the bar** — expanded or collapsed — to move it anywhere on the frame.
-  The dropped spot persists across settings edits, theme changes and app
-  restarts. Placement switches to Free by itself on the first drag; Anchored
-  keeps it in the corner you pick.
-- The chevron points **from the bar's edge into the kiosk**, wherever the bar
-  sits: down from a top corner, up from a bottom corner, and sideways for a
-  freely placed bar near a side.
+- **Drag the bar** — expanded or collapsed — and it **redocks on the frame edge
+  nearest the release**, exactly like the navbar: flush with that edge, with the
+  drop point's other coordinate sliding it along it. The docked edge and spot
+  persist across settings edits, theme changes and app restarts.
+- The chevron points **from the docked edge into the kiosk**: down from the top
+  edge, up from the bottom, and sideways from a side.
 - Every QR code also has its own **Show QR code N** action: assign it in
   **Gestures > Run a plugin action**, keep it in the kiosk drawer or expose it
   as a Home Assistant button from the plugin subpage.
@@ -35,9 +34,8 @@ credentials — whatever a phone needs to scan.
 | Setting | Meaning |
 | --- | --- |
 | Show bar | Turn the bar on or off |
-| Placement | `Anchored` to the corner below, or `Free` where you last dragged it |
-| Corner | The anchor corner while placement is Anchored |
-| Free position X, Y | Kept by the bar when you drag it |
+| Frame edge | The edge the bar hugs: Top, Bottom, Left or Right. A drag redocks it on the nearest edge |
+| Position along the edge | Kept by the bar when you drag it |
 | QR size | The size of the QR in the full screen card, 160 to 480 dp |
 
 Each **QR code 1–4** group has the same settings:

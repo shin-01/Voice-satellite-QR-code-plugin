@@ -26,7 +26,8 @@ public final class QrPluginTest {
     static Map<String, Object> settings() {
         Map<String, Object> settings = new LinkedHashMap<>();
         settings.put("showBar", true);
-        settings.put("corner", "Bottom left");
+        settings.put("edge", "Bottom");
+        settings.put("edgeOffset", 0);
         settings.put("qrSize", 320);
         for (int slot = 1; slot <= 4; slot++) {
             settings.put("qr" + slot + "Title", "QR " + slot);
@@ -50,28 +51,35 @@ public final class QrPluginTest {
         assert "qr_code".matches("[a-z][a-z0-9_]{0,39}");
         assert "qr_drag".matches("[a-z][a-z0-9_]{0,39}");
 
-        // The bar appears once started, anchored where the settings say.
+        // The bar appears once started, docked on the edge the settings say.
         plugin.start(host, settings());
         OverlaySpec bar = host.shown.get("qr_bar");
         assert bar != null;
-        assert OverlaySpec.BOTTOM_LEFT.equals(bar.anchor()) && bar.inset() == 16;
+        assert OverlaySpec.BOTTOM.equals(bar.anchor());
         assert OverlaySpec.FADE.equals(bar.enter()) && bar.touchable();
         assert bar.offsetX() == 0 && bar.offsetY() == 0;
 
-        // Free placement positions the bar by its saved offset from the center.
-        Map<String, Object> free = settings();
-        free.put("placement", "Free");
-        free.put("barX", -120);
-        free.put("barY", 60);
-        plugin.configure(free);
-        OverlaySpec floating = host.shown.get("qr_bar");
-        assert floating != null && floating.offsetX() == -120 && floating.offsetY() == 60;
-        assert OverlaySpec.CENTER.equals(floating.anchor()) && floating.inset() == 0;
+        // The offset slides the bar along its edge.
+        Map<String, Object> slid = settings();
+        slid.put("edge", "Bottom");
+        slid.put("edgeOffset", -120);
+        plugin.configure(slid);
+        OverlaySpec slidBar = host.shown.get("qr_bar");
+        assert slidBar != null && slidBar.offsetX() == -120 && slidBar.offsetY() == 0;
+        assert OverlaySpec.BOTTOM.equals(slidBar.anchor());
 
-        // Anchored never drags: the bar stays on its corner across a rebuild.
+        // A side edge docks vertically and the offset slides along Y.
+        Map<String, Object> side = settings();
+        side.put("edge", "Left");
+        side.put("edgeOffset", 60);
+        plugin.configure(side);
+        OverlaySpec rail = host.shown.get("qr_bar");
+        assert rail != null && OverlaySpec.LEFT.equals(rail.anchor());
+        assert rail.offsetX() == 0 && rail.offsetY() == 60;
+
+        // The default edge is Top.
         plugin.configure(settings());
-        OverlaySpec anchored = host.shown.get("qr_bar");
-        assert anchored != null && OverlaySpec.BOTTOM_LEFT.equals(anchored.anchor());
+        assert OverlaySpec.BOTTOM.equals(host.shown.get("qr_bar").anchor());
 
         // Every slot's action opens the full screen card and hides the bar.
         plugin.configure(settings());

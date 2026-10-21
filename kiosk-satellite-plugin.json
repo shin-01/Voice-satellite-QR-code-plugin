@@ -3,10 +3,10 @@
   "apiVersion": 1,
   "id": "voice-satellite-qrcode",
   "name": "QR Code",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "minAndroidSdk": 24,
   "entryClass": "example.kiosk.QrPlugin",
-  "description": "A hideable bar of QR code buttons, docked anywhere on the kiosk's frame and dragged wherever you want. Expanded it shows an icon per QR code; collapsed just the arrow that brings it back. Each QR encodes a URL, text or Wi-Fi credentials and also opens through an action bindable to gestures.",
+  "description": "A hideable bar of QR code buttons, docked on any frame edge and dragged from edge to edge like a navbar. Expanded it shows an icon per QR code; collapsed just the arrow that brings it back. Each QR encodes a URL, text or Wi-Fi credentials and also opens through an action bindable to gestures.",
   "author": "shin-01",
   "license": "Apache-2.0 AND MIT",
   "capabilities": [
@@ -39,58 +39,30 @@
       "description": "Turn the QR code bar on or off."
     },
     {
-      "key": "placement",
+      "key": "edge",
       "type": "select",
-      "title": "Placement",
-      "default": "Anchored",
+      "title": "Frame edge",
+      "default": "Top",
       "options": [
-        "Anchored",
-        "Free"
+        "Top",
+        "Bottom",
+        "Left",
+        "Right"
       ],
       "group": "Bar",
-      "description": "Anchored keeps the bar in the corner below. Free leaves it where you last dragged it. Dragging switches this to Free by itself."
+      "description": "The frame edge the bar hugs. Dragging the bar redocks it on the edge nearest the release."
     },
     {
-      "key": "corner",
-      "type": "select",
-      "title": "Corner",
-      "default": "Top right",
-      "options": [
-        "Top left",
-        "Top right",
-        "Bottom left",
-        "Bottom right"
-      ],
-      "group": "Bar",
-      "visibleWhen": {
-        "key": "placement",
-        "equals": "Anchored"
-      },
-      "description": "Where the anchored bar sits on the frame."
-    },
-    {
-      "key": "barX",
+      "key": "edgeOffset",
       "type": "number",
-      "title": "Free position X",
+      "title": "Position along the edge",
       "default": 0,
       "min": -4096,
       "max": 4096,
       "step": 1,
       "unit": "dp",
       "group": "Bar",
-      "description": "Kept by the bar when you drag it, relative to the kiosk's center."
-    },
-    {
-      "key": "barY",
-      "type": "number",
-      "title": "Free position Y",
-      "default": 0,
-      "min": -4096,
-      "max": 4096,
-      "step": 1,
-      "unit": "dp",
-      "group": "Bar",
-      "description": "Kept by the bar when you drag it, relative to the kiosk's center."
+      "description": "Kept by the bar when you drag it: its center along the edge, relative to the kiosk's center."
     },
     {
       "key": "qrSize",

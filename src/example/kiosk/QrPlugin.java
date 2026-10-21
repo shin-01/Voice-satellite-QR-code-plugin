@@ -50,10 +50,10 @@ public final class QrPlugin implements KioskPlugin {
     private final String[] barIcon = new String[SLOTS];
     private boolean showBar = true;
     private boolean expanded = true;
-    private String corner = "Top right";
-    private String placement = "Anchored";
-    private int barX;
-    private int barY;
+    /** The frame edge the bar hugs, the navbar's dock model. */
+    private String edge = "Top";
+    /** The bar's center along its edge, in dp from the kiosk's center. */
+    private int edgeOffset;
     private double qrSize = 320;
     /** The open card's slot, or -1 when none is open. */
     private int openSlot = -1;
@@ -83,11 +83,9 @@ public final class QrPlugin implements KioskPlugin {
             content[slot] = buildContent(settings, prefix);
         }
         showBar = Boolean.TRUE.equals(settings.get("showBar"));
-        corner = string(settings.get("corner"));
-        placement = string(settings.get("placement"));
-        if (placement.isEmpty()) placement = "Anchored";
-        barX = dpSetting(settings.get("barX"));
-        barY = dpSetting(settings.get("barY"));
+        edge = string(settings.get("edge"));
+        if (edge.isEmpty()) edge = "Top";
+        edgeOffset = dpSetting(settings.get("edgeOffset"));
         Object size = settings.get("qrSize");
         qrSize = size instanceof Number ? ((Number) size).doubleValue() : 320;
         if (host == null) return;
@@ -193,12 +191,11 @@ public final class QrPlugin implements KioskPlugin {
      * there taking taps for a moment longer.
      */
     private synchronized void rebuildBar(int[] active, boolean animated) {
-        boolean free = "Free".equals(placement);
-        // Anchored sits on the chosen corner of the frame; Free carries the bar's
-        // center as an offset from the middle of the kiosk, wherever the last drag left it.
-        OverlaySpec spec = OverlaySpec.at(free ? OverlaySpec.CENTER : anchor(corner));
-        spec = spec.inset(free ? 0 : 16);
-        if (free) spec = spec.offset(barX, barY);
+        // Docked like the navbar: flush with its edge, the view keeps its own
+        // distance, and the saved offset slides it along that edge.
+        boolean vertical = "Left".equals(edge) || "Right".equals(edge);
+        OverlaySpec spec = OverlaySpec.at(edgeAnchor())
+            .offset(vertical ? 0 : edgeOffset, vertical ? edgeOffset : 0);
         if (animated) spec = spec
             .enter(OverlaySpec.FADE)
             .exit(OverlaySpec.FADE)
@@ -236,11 +233,12 @@ public final class QrPlugin implements KioskPlugin {
         }
     }
 
-    private static String anchor(String corner) {
-        if ("Top left".equals(corner)) return OverlaySpec.TOP_LEFT;
-        if ("Bottom left".equals(corner)) return OverlaySpec.BOTTOM_LEFT;
-        if ("Bottom right".equals(corner)) return OverlaySpec.BOTTOM_RIGHT;
-        return OverlaySpec.TOP_RIGHT;
+    /** The OverlaySpec anchor for the edge the bar is docked to. */
+    private String edgeAnchor() {
+        if ("Left".equals(edge)) return OverlaySpec.LEFT;
+        if ("Right".equals(edge)) return OverlaySpec.RIGHT;
+        if ("Bottom".equals(edge)) return OverlaySpec.BOTTOM;
+        return OverlaySpec.TOP;
     }
 
     /**
@@ -248,22 +246,10 @@ public final class QrPlugin implements KioskPlugin {
      * from the bar's edge into the kiosk.
      */
     private String chevron() {
-        String edge = "Free".equals(placement) ? freeEdge() : anchoredEdge();
-        if ("top".equals(edge)) return "mdi:chevron-down";
-        if ("bottom".equals(edge)) return "mdi:chevron-up";
-        if ("left".equals(edge)) return "mdi:chevron-right";
-        return "mdi:chevron-left";
-    }
-
-    /** The frame edge an anchored corner sits on. */
-    private String anchoredEdge() {
-        return corner.startsWith("Top") ? "top" : "bottom";
-    }
-
-    /** The frame edge a freely placed bar is closest to. */
-    private String freeEdge() {
-        if (Math.abs(barY) >= Math.abs(barX)) return barY <= 0 ? "top" : "bottom";
-        return barX <= 0 ? "left" : "right";
+        if ("Left".equals(edge)) return "mdi:chevron-right";
+        if ("Right".equals(edge)) return "mdi:chevron-left";
+        if ("Bottom".equals(edge)) return "mdi:chevron-up";
+        return "mdi:chevron-down";
     }
 
     /**
@@ -285,12 +271,11 @@ public final class QrPlugin implements KioskPlugin {
     }
 
     /**
-     * The bar's touch stream. A drag moves the bar anywhere on the kiosk, but
-     * only while its placement is Free: an Anchored bar stays where the corner
-     * setting puts it, so dragging does nothing at all. A plain tap opens the
-     * icon under the finger or toggles the collapse on the chevron. The
-     * listener owns the whole stream: returning false on DOWN would hand it to
-     * a child and the drag would never start.
+     * The bar's touch stream. A drag redocks the bar on the frame edge nearest
+     * the release, the navbar's model. A plain tap opens the icon under the
+     * finger or toggles the collapse on the chevron. The listener owns the whole
+     * stream: returning false on DOWN would hand it to a child and the drag
+     * would never start.
      */
     private View.OnTouchListener barTouch(final int[] slots) {
         return new View.OnTouchListener() {
@@ -305,7 +290,6 @@ public final class QrPlugin implements KioskPlugin {
                         downY = event.getRawY();
                         return true;
                     case MotionEvent.ACTION_MOVE: {
-                        if (!"Free".equals(placement)) return true;
                         float density = view.getResources().getDisplayMetrics().density;
                         if (!dragging) {
                             float moved = Math.max(
@@ -321,7 +305,9 @@ public final class QrPlugin implements KioskPlugin {
                     case MotionEvent.ACTION_UP:
                     case MotionEvent.ACTION_CANCEL: {
                         boolean wasDragging = dragging;
-                        dragging = false;
+                        // dropBar clears the flag itself; clearing it here first
+                        // made dropBar return at once, leaving the drag layer up
+                        // and the bar's view invisible at the old spot.
                         if (wasDragging) {
                             tap(QrPlugin.this::dropBar);
                         } else if (event.getActionMasked() == MotionEvent.ACTION_UP) {
@@ -404,17 +390,22 @@ public final class QrPlugin implements KioskPlugin {
         if (dragDensity <= 0) return;
         int screenW = Math.round(dragScreenW / dragDensity);
         int screenH = Math.round(dragScreenH / dragDensity);
-        // The bar's center at the drop, in dp, relative to the kiosk's center.
-        int centerX = Math.round(dragX / dragDensity);
-        int centerY = Math.round(dragY / dragDensity);
-        barX = Math.max(-screenW / 2, Math.min(screenW / 2, centerX - screenW / 2));
-        barY = Math.max(-screenH / 2, Math.min(screenH / 2, centerY - screenH / 2));
-        placement = "Free";
+        // The drop point, in dp, relative to the kiosk's center.
+        int x = Math.round(dragX / dragDensity) - screenW / 2;
+        int y = Math.round(dragY / dragDensity) - screenH / 2;
+        // Dock to the nearest edge, the navbar's model: flush with it, and the
+        // remaining coordinate slides the bar along that edge.
+        if (Math.abs(y) >= Math.abs(x)) {
+            edge = y <= 0 ? "Top" : "Bottom";
+            edgeOffset = Math.max(-screenW / 2, Math.min(screenW / 2, x));
+        } else {
+            edge = x <= 0 ? "Left" : "Right";
+            edgeOffset = Math.max(-screenH / 2, Math.min(screenH / 2, y));
+        }
         try {
             Map<String, Object> values = new java.util.LinkedHashMap<>();
-            values.put("placement", "Free");
-            values.put("barX", barX);
-            values.put("barY", barY);
+            values.put("edge", edge);
+            values.put("edgeOffset", edgeOffset);
             host.updateSettings(values);
         } catch (UnsupportedOperationException olderHost) {}
         rebuildBar(activeSlots(), false);
