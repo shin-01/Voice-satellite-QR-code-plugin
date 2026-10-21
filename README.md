@@ -1,43 +1,44 @@
 # QR Code (Kiosk Satellite plugin)
 
-A pill per QR code, each with its own icon. Grouped pills share one pill; a
-detached pill floats on its own. Every QR encodes a URL, plain text or Wi-Fi
+A hideable bar of QR code buttons, docked anywhere on the kiosk's frame and
+dragged wherever you want. Every QR encodes a URL, plain text or Wi-Fi
 credentials — whatever a phone needs to scan.
 
 ## What it does
 
-- Every QR code gets a **pill with an icon of your choosing** — no title on the
-  pill. The QR's title appears in its full screen card.
-- **Grouped** pills share one pill that carries an icon per QR code. Tapping it
-  with several QR codes inside first asks **which to show, in a modal** with a
-  row per QR; with a single QR code it opens it directly.
-- **Detached** pills float on their own, each in its own corner until you drag
-  it anywhere. Tapping a detached pill opens its QR directly.
-- Dragging a pill moves it (or the whole group) anywhere on the kiosk; the spot
-  survives settings edits, theme changes and app restarts.
+- **The bar** shows one icon per configured QR code, with a chevron at its end.
+- **Tap an icon** to open that QR code full screen; tap the chevron to collapse
+  the bar. Collapsed, only the **arrow handle** stays, and tapping it brings the
+  bar back.
+- **Drag the bar** — expanded or collapsed — to move it anywhere on the frame.
+  The dropped spot persists across settings edits, theme changes and app
+  restarts. Placement switches to Free by itself on the first drag; Anchored
+  keeps it in the corner you pick.
+- The chevron points **from the bar's edge into the kiosk**, wherever the bar
+  sits: down from a top corner, up from a bottom corner, and sideways for a
+  freely placed bar near a side.
 - Every QR code also has its own **Show QR code N** action: assign it in
   **Gestures > Run a plugin action**, keep it in the kiosk drawer or expose it
   as a Home Assistant button from the plugin subpage.
 
 ## Settings
 
-**Pills** covers the group:
+**Bar**:
 
 | Setting | Meaning |
 | --- | --- |
-| Show pills | Turn the pills on or off |
-| Group placement | `Anchored` to the corner below, or `Free` where you last dragged the group |
-| Group corner | The anchor corner while placement is Anchored |
+| Show bar | Turn the bar on or off |
+| Placement | `Anchored` to the corner below, or `Free` where you last dragged it |
+| Corner | The anchor corner while placement is Anchored |
+| Free position X, Y | Kept by the bar when you drag it |
 | QR size | The size of the QR in the full screen card, 160 to 480 dp |
 
 Each **QR code 1–4** group has the same settings:
 
 | Setting | Meaning |
 | --- | --- |
-| Title | The heading of that QR's card and its row in the chooser |
-| Pill icon | The icon this QR code's pill shows |
-| Pill | `Grouped` or `Detached` |
-| Detached position X, Y | Kept by the pill when you drag it |
+| Title | The heading of that QR's card |
+| Bar icon | The icon this QR code shows on the bar |
 | Content type | `Wi-Fi`, `URL` or `Text` |
 | Network name (SSID), Security, Password | Shown for `Wi-Fi`. The password is masked |
 | URL / Text | Shown for `URL` / `Text` |

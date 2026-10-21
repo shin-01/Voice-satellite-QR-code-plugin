@@ -7,7 +7,7 @@ import me.jxl.kiosk.plugins.OverlayFactory;
 import me.jxl.kiosk.plugins.OverlaySpec;
 import me.jxl.kiosk.plugins.PluginHost;
 
-/** Checks what the QR plugin asks KS for, for every pill and content type. */
+/** Checks what the QR plugin asks KS for, for the bar and every content type. */
 public final class QrPluginTest {
     static final class Host implements PluginHost {
         final Map<String, OverlaySpec> shown = new LinkedHashMap<>();
@@ -25,13 +25,12 @@ public final class QrPluginTest {
 
     static Map<String, Object> settings() {
         Map<String, Object> settings = new LinkedHashMap<>();
-        settings.put("showWidget", true);
+        settings.put("showBar", true);
         settings.put("corner", "Bottom left");
         settings.put("qrSize", 320);
         for (int slot = 1; slot <= 4; slot++) {
             settings.put("qr" + slot + "Title", "QR " + slot);
             settings.put("qr" + slot + "Icon", "mdi:numeric-" + slot + "-circle");
-            settings.put("qr" + slot + "Pill", "Grouped");
             settings.put("qr" + slot + "Type", slot == 1 ? "Wi-Fi" : "URL");
             settings.put("qr" + slot + "Ssid", slot == 1 ? "Home" : "");
             settings.put("qr" + slot + "Security", "WPA/WPA2/WPA3");
@@ -47,67 +46,45 @@ public final class QrPluginTest {
         QrPlugin plugin = new QrPlugin();
 
         // Overlay keys follow [a-z][a-z0-9_]{0,39}; KS rejects anything else.
-        assert "qr_group".matches("[a-z][a-z0-9_]{0,39}");
+        assert "qr_bar".matches("[a-z][a-z0-9_]{0,39}");
         assert "qr_code".matches("[a-z][a-z0-9_]{0,39}");
         assert "qr_drag".matches("[a-z][a-z0-9_]{0,39}");
-        assert "qr_pill_2".matches("[a-z][a-z0-9_]{0,39}");
 
-        // All four grouped: one group pill, anchored where the settings say.
+        // The bar appears once started, anchored where the settings say.
         plugin.start(host, settings());
-        OverlaySpec group = host.shown.get("qr_group");
-        assert group != null;
-        assert OverlaySpec.BOTTOM_LEFT.equals(group.anchor()) && group.inset() == 16;
-        assert OverlaySpec.FADE.equals(group.enter()) && group.touchable();
-        assert !host.shown.containsKey("qr_pill_1");
+        OverlaySpec bar = host.shown.get("qr_bar");
+        assert bar != null;
+        assert OverlaySpec.BOTTOM_LEFT.equals(bar.anchor()) && bar.inset() == 16;
+        assert OverlaySpec.FADE.equals(bar.enter()) && bar.touchable();
+        assert bar.offsetX() == 0 && bar.offsetY() == 0;
 
-        // Detached pills get their own overlays, each in its own corner.
-        Map<String, Object> detached = settings();
-        detached.put("qr2Pill", "Detached");
-        detached.put("qr3Pill", "Detached");
-        plugin.configure(detached);
-        assert host.shown.containsKey("qr_group");
-        assert host.shown.containsKey("qr_pill_2") && host.shown.containsKey("qr_pill_3");
-        assert !host.shown.containsKey("qr_pill_1") && !host.shown.containsKey("qr_pill_4");
-        assert OverlaySpec.TOP_RIGHT.equals(host.shown.get("qr_pill_2").anchor());
-
-        // A dragged detached pill keeps its saved position as a center offset.
-        Map<String, Object> moved = settings();
-        moved.put("qr2Pill", "Detached");
-        moved.put("qr2X", -120);
-        moved.put("qr2Y", 60);
-        plugin.configure(moved);
-        OverlaySpec floating = host.shown.get("qr_pill_2");
+        // Free placement positions the bar by its saved offset from the center.
+        Map<String, Object> free = settings();
+        free.put("placement", "Free");
+        free.put("barX", -120);
+        free.put("barY", 60);
+        plugin.configure(free);
+        OverlaySpec floating = host.shown.get("qr_bar");
         assert floating != null && floating.offsetX() == -120 && floating.offsetY() == 60;
         assert OverlaySpec.CENTER.equals(floating.anchor()) && floating.inset() == 0;
 
-        // A free group carries the same offset from the center.
-        Map<String, Object> free = settings();
-        free.put("placement", "Free");
-        free.put("widgetX", -90);
-        free.put("widgetY", 40);
-        plugin.configure(free);
-        OverlaySpec groupFree = host.shown.get("qr_group");
-        assert groupFree != null && groupFree.offsetX() == -90 && groupFree.offsetY() == 40;
-        assert OverlaySpec.CENTER.equals(groupFree.anchor());
-
-        // Every slot's action opens the full screen card and hides the pills.
+        // Every slot's action opens the full screen card and hides the bar.
         plugin.configure(settings());
         plugin.execute("showQr", new LinkedHashMap<String, Object>());
         OverlaySpec code = host.shown.get("qr_code");
         assert code != null;
         assert code.width() == OverlaySpec.FILL && code.height() == OverlaySpec.FILL;
         assert code.closeOnOutsideTouch() && code.closeOnBack();
-        assert !host.shown.containsKey("qr_group");
-        // KS removes the card itself on overlay.closed; the pills come back.
+        assert !host.shown.containsKey("qr_bar");
+        // KS removes the card itself on overlay.closed; the bar comes back.
         plugin.onEvent("overlay.closed", map("key", "qr_code"));
-        assert host.shown.containsKey("qr_group");
+        assert host.shown.containsKey("qr_bar");
 
-        // Show pills off removes every pill; an open QR card is left alone.
+        // Show bar off removes the bar; an open QR card is left alone.
         Map<String, Object> off = settings();
-        off.put("showWidget", false);
+        off.put("showBar", false);
         plugin.configure(off);
-        assert !host.shown.containsKey("qr_group");
-        for (int slot = 1; slot <= 4; slot++) assert !host.shown.containsKey("qr_pill_" + slot);
+        assert !host.shown.containsKey("qr_bar");
 
         // The Wi-Fi string escapes its reserved characters.
         Map<String, Object> tricky = settings();
