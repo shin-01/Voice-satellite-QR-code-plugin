@@ -9,6 +9,7 @@
   "description": "A hideable bar of QR code buttons, docked on any frame edge and dragged from edge to edge like a navbar. Expanded it shows an icon per QR code; collapsed just the arrow that brings it back. Each QR encodes a URL, text or Wi-Fi credentials and also opens through an action bindable to gestures.",
   "author": "shin-01",
   "license": "Apache-2.0 AND MIT",
+  "icon": "icon.png",
   "capabilities": [
     "overlay"
   ],
