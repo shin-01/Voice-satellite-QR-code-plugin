@@ -499,8 +499,9 @@ public final class QrPlugin implements KioskPlugin {
                 indicator.setBackground(pill);
                 indicator.setLayoutParams(new LinearLayout.LayoutParams(theme.px(44), theme.px(32)));
                 android.widget.ImageView icon = (android.widget.ImageView) indicator.getChildAt(0);
-                LinearLayout.LayoutParams glyph = new LinearLayout.LayoutParams(theme.px(24), theme.px(24));
-                icon.setLayoutParams(glyph);
+                // The icon's parent is the indicator FrameLayout, so its layout
+                // params must be FrameLayout.LayoutParams or the layout pass throws.
+                icon.setLayoutParams(new android.widget.FrameLayout.LayoutParams(theme.px(24), theme.px(24), Gravity.CENTER));
                 String name = (String) icon.getTag();
                 Drawable glyph2 = icon(theme, name, "onSurfaceVariant");
                 if (glyph2 != null)
