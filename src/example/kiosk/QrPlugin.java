@@ -50,10 +50,15 @@ public final class QrPlugin implements KioskPlugin {
     private final String[] barIcon = new String[SLOTS];
     private boolean showBar = true;
     private boolean expanded = true;
+    /** How the bar is placed: docked to a frame edge or floating free. */
+    private String docking = "Edge";
     /** The frame edge the bar hugs, the navbar's dock model. */
     private String edge = "Top";
     /** The bar's center along its edge, in dp from the kiosk's center. */
     private int edgeOffset;
+    /** A free bar's center, in dp from the kiosk's center. */
+    private int freeX;
+    private int freeY;
     private double qrSize = 320;
     /** The open card's slot, or -1 when none is open. */
     private int openSlot = -1;
@@ -83,9 +88,13 @@ public final class QrPlugin implements KioskPlugin {
             content[slot] = buildContent(settings, prefix);
         }
         showBar = Boolean.TRUE.equals(settings.get("showBar"));
+        docking = string(settings.get("docking"));
+        if (docking.isEmpty()) docking = "Edge";
         edge = string(settings.get("edge"));
         if (edge.isEmpty()) edge = "Top";
         edgeOffset = dpSetting(settings.get("edgeOffset"));
+        freeX = dpSetting(settings.get("freeX"));
+        freeY = dpSetting(settings.get("freeY"));
         Object size = settings.get("qrSize");
         qrSize = size instanceof Number ? ((Number) size).doubleValue() : 320;
         if (host == null) return;
@@ -191,11 +200,19 @@ public final class QrPlugin implements KioskPlugin {
      * there taking taps for a moment longer.
      */
     private synchronized void rebuildBar(int[] active, boolean animated) {
-        // Docked like the navbar: flush with its edge, the view keeps its own
-        // distance, and the saved offset slides it along that edge.
-        boolean vertical = "Left".equals(edge) || "Right".equals(edge);
-        OverlaySpec spec = OverlaySpec.at(edgeAnchor())
-            .offset(vertical ? 0 : edgeOffset, vertical ? edgeOffset : 0);
+        OverlaySpec spec;
+        if ("Free".equals(docking)) {
+            // A free bar floats anywhere, its center offset from the kiosk's middle.
+            spec = OverlaySpec.at(OverlaySpec.CENTER)
+                .inset(0)
+                .offset(freeX, freeY);
+        } else {
+            // Docked like the navbar: flush with its edge, the view keeps its own
+            // distance, and the saved offset slides it along that edge.
+            boolean vertical = "Left".equals(edge) || "Right".equals(edge);
+            spec = OverlaySpec.at(edgeAnchor())
+                .offset(vertical ? 0 : edgeOffset, vertical ? edgeOffset : 0);
+        }
         if (animated) spec = spec
             .enter(OverlaySpec.FADE)
             .exit(OverlaySpec.FADE)
@@ -233,6 +250,12 @@ public final class QrPlugin implements KioskPlugin {
         }
     }
 
+    /** A free bar's chevron points in from the edge it is closest to. */
+    private String freeEdgeChevron() {
+        if (Math.abs(freeY) >= Math.abs(freeX)) return freeY <= 0 ? "mdi:chevron-down" : "mdi:chevron-up";
+        return freeX <= 0 ? "mdi:chevron-right" : "mdi:chevron-left";
+    }
+
     /** The OverlaySpec anchor for the edge the bar is docked to. */
     private String edgeAnchor() {
         if ("Left".equals(edge)) return OverlaySpec.LEFT;
@@ -246,6 +269,7 @@ public final class QrPlugin implements KioskPlugin {
      * from the bar's edge into the kiosk.
      */
     private String chevron() {
+        if ("Free".equals(docking)) return freeEdgeChevron();
         if ("Left".equals(edge)) return "mdi:chevron-right";
         if ("Right".equals(edge)) return "mdi:chevron-left";
         if ("Bottom".equals(edge)) return "mdi:chevron-up";
@@ -391,21 +415,29 @@ public final class QrPlugin implements KioskPlugin {
         int screenW = Math.round(dragScreenW / dragDensity);
         int screenH = Math.round(dragScreenH / dragDensity);
         // The drop point, in dp, relative to the kiosk's center.
-        int x = Math.round(dragX / dragDensity) - screenW / 2;
-        int y = Math.round(dragY / dragDensity) - screenH / 2;
-        // Dock to the nearest edge, the navbar's model: flush with it, and the
-        // remaining coordinate slides the bar along that edge.
-        if (Math.abs(y) >= Math.abs(x)) {
-            edge = y <= 0 ? "Top" : "Bottom";
-            edgeOffset = Math.max(-screenW / 2, Math.min(screenW / 2, x));
+        int x = Math.max(-screenW / 2, Math.min(screenW / 2, Math.round(dragX / dragDensity) - screenW / 2));
+        int y = Math.max(-screenH / 2, Math.min(screenH / 2, Math.round(dragY / dragDensity) - screenH / 2));
+        Map<String, Object> values = new java.util.LinkedHashMap<>();
+        if ("Free".equals(docking)) {
+            // Free placement: the bar stays exactly where it is dropped.
+            freeX = x;
+            freeY = y;
+            values.put("freeX", freeX);
+            values.put("freeY", freeY);
         } else {
-            edge = x <= 0 ? "Left" : "Right";
-            edgeOffset = Math.max(-screenH / 2, Math.min(screenH / 2, y));
-        }
-        try {
-            Map<String, Object> values = new java.util.LinkedHashMap<>();
+            // Dock to the nearest edge, the navbar's model: flush with it, and the
+            // remaining coordinate slides the bar along that edge.
+            if (Math.abs(y) >= Math.abs(x)) {
+                edge = y <= 0 ? "Top" : "Bottom";
+                edgeOffset = x;
+            } else {
+                edge = x <= 0 ? "Left" : "Right";
+                edgeOffset = y;
+            }
             values.put("edge", edge);
             values.put("edgeOffset", edgeOffset);
+        }
+        try {
             host.updateSettings(values);
         } catch (UnsupportedOperationException olderHost) {}
         rebuildBar(activeSlots(), false);

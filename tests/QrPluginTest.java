@@ -26,6 +26,7 @@ public final class QrPluginTest {
     static Map<String, Object> settings() {
         Map<String, Object> settings = new LinkedHashMap<>();
         settings.put("showBar", true);
+        settings.put("docking", "Edge");
         settings.put("edge", "Bottom");
         settings.put("edgeOffset", 0);
         settings.put("qrSize", 320);
@@ -80,6 +81,17 @@ public final class QrPluginTest {
         // The default edge is Top.
         plugin.configure(settings());
         assert OverlaySpec.BOTTOM.equals(host.shown.get("qr_bar").anchor());
+
+        // Free docking floats the bar anywhere, offset from the center.
+        Map<String, Object> free = settings();
+        free.put("docking", "Free");
+        free.put("freeX", -100);
+        free.put("freeY", 80);
+        plugin.configure(free);
+        OverlaySpec floating = host.shown.get("qr_bar");
+        assert floating != null;
+        assert OverlaySpec.CENTER.equals(floating.anchor()) && floating.inset() == 0;
+        assert floating.offsetX() == -100 && floating.offsetY() == 80;
 
         // Every slot's action opens the full screen card and hides the bar.
         plugin.configure(settings());

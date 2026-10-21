@@ -17,10 +17,13 @@ credentials — whatever a phone needs to scan.
 - **Tap an icon** to open that QR code full screen; tap the chevron to collapse
   the bar. Collapsed, only the **arrow handle** stays, and tapping it brings the
   bar back.
-- **Drag the bar** — expanded or collapsed — and it **redocks on the frame edge
-  nearest the release**, exactly like the navbar: flush with that edge, with the
-  drop point's other coordinate sliding it along it. The docked edge and spot
-  persist across settings edits, theme changes and app restarts.
+- **Docking** picks how the bar is placed:
+  - **Edge** snaps it to a frame edge, like a navbar. Dragging it — expanded or
+    collapsed — **redocks it on the edge nearest the release**, flush, with the
+    drop point's other coordinate sliding it along that edge.
+  - **Free** lets it float anywhere: a drag leaves it exactly where you drop it.
+- The docked edge, along-edge spot or free position persist across settings
+  edits, theme changes and app restarts.
 - The chevron points **from the docked edge into the kiosk**: down from the top
   edge, up from the bottom, and sideways from a side.
 - Every QR code also has its own **Show QR code N** action: assign it in
@@ -34,8 +37,10 @@ credentials — whatever a phone needs to scan.
 | Setting | Meaning |
 | --- | --- |
 | Show bar | Turn the bar on or off |
-| Frame edge | The edge the bar hugs: Top, Bottom, Left or Right. A drag redocks it on the nearest edge |
-| Position along the edge | Kept by the bar when you drag it |
+| Docking | `Edge`, snapped to a frame edge like a navbar, or `Free`, floating anywhere |
+| Frame edge | With Edge docking: the edge the bar hugs. A drag redocks it on the nearest edge |
+| Position along the edge | With Edge docking: kept by the bar when you drag it |
+| Free position X, Y | With Free docking: kept by the bar when you drag it |
 | QR size | The size of the QR in the full screen card, 160 to 480 dp |
 
 Each **QR code 1–4** group has the same settings:

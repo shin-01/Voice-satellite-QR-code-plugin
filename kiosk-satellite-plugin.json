@@ -3,7 +3,7 @@
   "apiVersion": 1,
   "id": "voice-satellite-qrcode",
   "name": "QR Code",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "minAndroidSdk": 24,
   "entryClass": "example.kiosk.QrPlugin",
   "description": "A hideable bar of QR code buttons, docked on any frame edge and dragged from edge to edge like a navbar. Expanded it shows an icon per QR code; collapsed just the arrow that brings it back. Each QR encodes a URL, text or Wi-Fi credentials and also opens through an action bindable to gestures.",
@@ -39,6 +39,18 @@
       "description": "Turn the QR code bar on or off."
     },
     {
+      "key": "docking",
+      "type": "select",
+      "title": "Docking",
+      "default": "Edge",
+      "options": [
+        "Edge",
+        "Free"
+      ],
+      "group": "Bar",
+      "description": "Edge snaps the bar to a frame edge, like a navbar. Free leaves it wherever you drop it."
+    },
+    {
       "key": "edge",
       "type": "select",
       "title": "Frame edge",
@@ -50,7 +62,11 @@
         "Right"
       ],
       "group": "Bar",
-      "description": "The frame edge the bar hugs. Dragging the bar redocks it on the edge nearest the release."
+      "visibleWhen": {
+        "key": "docking",
+        "equals": "Edge"
+      },
+      "description": "The frame edge the bar hugs. Dragging redocks it on the edge nearest the release."
     },
     {
       "key": "edgeOffset",
@@ -62,7 +78,43 @@
       "step": 1,
       "unit": "dp",
       "group": "Bar",
+      "visibleWhen": {
+        "key": "docking",
+        "equals": "Edge"
+      },
       "description": "Kept by the bar when you drag it: its center along the edge, relative to the kiosk's center."
+    },
+    {
+      "key": "freeX",
+      "type": "number",
+      "title": "Free position X",
+      "default": 0,
+      "min": -4096,
+      "max": 4096,
+      "step": 1,
+      "unit": "dp",
+      "group": "Bar",
+      "visibleWhen": {
+        "key": "docking",
+        "equals": "Free"
+      },
+      "description": "Kept by the bar when you drag it: horizontal center, relative to the kiosk's center."
+    },
+    {
+      "key": "freeY",
+      "type": "number",
+      "title": "Free position Y",
+      "default": 0,
+      "min": -4096,
+      "max": 4096,
+      "step": 1,
+      "unit": "dp",
+      "group": "Bar",
+      "visibleWhen": {
+        "key": "docking",
+        "equals": "Free"
+      },
+      "description": "Kept by the bar when you drag it: vertical center, relative to the kiosk's center."
     },
     {
       "key": "qrSize",
