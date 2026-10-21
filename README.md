@@ -32,14 +32,14 @@ credentials — whatever a phone needs to scan.
 
 
 ## Installation
-###Community Plugins (Recommended)
+### Community Plugins (Recommended)
 Navbar is listed in Community Plugins. Use the button below to open it in your Kiosk Satellite and install it.
 
 [![Install in Kiosk Satellite](https://kiosksatellite.com/img/badges/plugin-add.svg)](https://kiosksatellite.com/redirect/plugin/?repository=shin-01/Voice-satellite-QR-code-plugin)
 
 Or search for Navbar in Settings > Plugin Manager > Browse plugins in Kiosk Satellite.
 
-###Manual
+### Manual
 Open Settings > Plugin Manager in Kiosk Satellite and turn on Enable Plugins.
 Choose Add plugin, paste https://github.com/shin-01/Voice-satellite-QR-code-plugin
 Choose Trust and install.
