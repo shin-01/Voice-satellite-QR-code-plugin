@@ -183,13 +183,23 @@ public final class QrPlugin implements KioskPlugin {
                 host.status("Give a QR code both a title and content to show the bar.", true);
             return;
         }
+        rebuildBar(active, true);
+    }
+
+    /**
+     * Rebuilds the bar overlay. An animated rebuild fades in; an immediate one
+     * swaps the view at once, which a drag's drop wants: the old view was
+     * transparent at the old spot, and a slow exit transition would leave it
+     * there taking taps for a moment longer.
+     */
+    private synchronized void rebuildBar(int[] active, boolean animated) {
         boolean free = "Free".equals(placement);
         // Anchored sits on the chosen corner of the frame; Free carries the bar's
         // center as an offset from the middle of the kiosk, wherever the last drag left it.
         OverlaySpec spec = OverlaySpec.at(free ? OverlaySpec.CENTER : anchor(corner));
         spec = spec.inset(free ? 0 : 16);
         if (free) spec = spec.offset(barX, barY);
-        spec = spec
+        if (animated) spec = spec
             .enter(OverlaySpec.FADE)
             .exit(OverlaySpec.FADE)
             .transitionDuration(200);
@@ -275,11 +285,12 @@ public final class QrPlugin implements KioskPlugin {
     }
 
     /**
-     * The bar's touch stream. A drag moves the bar anywhere on the kiosk; a
-     * plain tap opens the icon under the finger, toggles the collapse on the
-     * chevron, or expands when collapsed. The listener owns the whole stream:
-     * returning false on DOWN would hand it to a child and the drag would
-     * never start.
+     * The bar's touch stream. A drag moves the bar anywhere on the kiosk, but
+     * only while its placement is Free: an Anchored bar stays where the corner
+     * setting puts it, so dragging does nothing at all. A plain tap opens the
+     * icon under the finger or toggles the collapse on the chevron. The
+     * listener owns the whole stream: returning false on DOWN would hand it to
+     * a child and the drag would never start.
      */
     private View.OnTouchListener barTouch(final int[] slots) {
         return new View.OnTouchListener() {
@@ -294,6 +305,7 @@ public final class QrPlugin implements KioskPlugin {
                         downY = event.getRawY();
                         return true;
                     case MotionEvent.ACTION_MOVE: {
+                        if (!"Free".equals(placement)) return true;
                         float density = view.getResources().getDisplayMetrics().density;
                         if (!dragging) {
                             float moved = Math.max(
@@ -361,6 +373,9 @@ public final class QrPlugin implements KioskPlugin {
         dragScreenH = view.getResources().getDisplayMetrics().heightPixels;
         try {
             host.showOverlay(DRAG, OverlaySpec.fullScreen().touchable(false), new DragLayer());
+            // The drag layer paints the handle; the bar's own view goes fully
+            // transparent but stays alive, because it owns the touch stream and
+            // removing it would cancel the gesture.
             view.setAlpha(0);
         } catch (UnsupportedOperationException olderHost) {
             dragging = false;
@@ -377,8 +392,9 @@ public final class QrPlugin implements KioskPlugin {
 
     /**
      * The finger left the bar somewhere new. Turn the drop point into a saved
-     * free position, persist it and rebuild the bar, so the spot survives
-     * settings edits, theme changes and app restarts.
+     * free position, persist it and rebuild the bar there. The old bar's view
+     * was removed when the drag began, so the rebuilt bar is the only thing on
+     * screen and its taps land where it is drawn.
      */
     private synchronized void dropBar() {
         if (!dragging) return;
@@ -401,7 +417,7 @@ public final class QrPlugin implements KioskPlugin {
             values.put("barY", barY);
             host.updateSettings(values);
         } catch (UnsupportedOperationException olderHost) {}
-        applyBar();
+        rebuildBar(activeSlots(), false);
     }
 
     /** A Material 3 role with a fallback for KS versions that do not provide it. */

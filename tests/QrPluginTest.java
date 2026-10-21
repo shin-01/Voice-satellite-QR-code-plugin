@@ -68,6 +68,11 @@ public final class QrPluginTest {
         assert floating != null && floating.offsetX() == -120 && floating.offsetY() == 60;
         assert OverlaySpec.CENTER.equals(floating.anchor()) && floating.inset() == 0;
 
+        // Anchored never drags: the bar stays on its corner across a rebuild.
+        plugin.configure(settings());
+        OverlaySpec anchored = host.shown.get("qr_bar");
+        assert anchored != null && OverlaySpec.BOTTOM_LEFT.equals(anchored.anchor());
+
         // Every slot's action opens the full screen card and hides the bar.
         plugin.configure(settings());
         plugin.execute("showQr", new LinkedHashMap<String, Object>());
