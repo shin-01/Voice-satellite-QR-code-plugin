@@ -404,22 +404,39 @@ public final class QrPlugin implements KioskPlugin {
         applyBar();
     }
 
-    /** An icon button on the bar: a TextView that carries only its drawable. */
-    private TextView iconView(Context context, KsTheme theme, String name) {
-        TextView icon = new TextView(context);
-        Drawable glyph = icon(theme, name, "primary");
-        if (glyph != null) glyph.setBounds(0, 0, theme.px(24), theme.px(24));
-        icon.setCompoundDrawablesRelative(glyph, null, null, null);
-        icon.setGravity(Gravity.CENTER);
-        icon.setMinWidth(theme.px(40));
-        icon.setMinHeight(theme.px(32));
-        return icon;
+    /** A Material 3 role with a fallback for KS versions that do not provide it. */
+    private static int color(KsTheme theme, String role, String fallback) {
+        try {
+            return theme.color(role);
+        } catch (IllegalArgumentException missing) {
+            return theme.color(fallback);
+        }
     }
 
     /**
-     * The hideable bar. Expanded it shows one icon per QR code and a chevron
-     * that collapses it; collapsed it shows the lone chevron handle that
-     * brings it back.
+     * Pressed feedback without animation, the navbar's approach: an onSurface
+     * wash that appears on touch down and goes on release. A ripple animates
+     * for about 300 ms, and every one of its frames has to cross KS's overlay
+     * texture, which arrives late on a low-power panel.
+     */
+    private static Drawable pressable(KsTheme theme, float radiusPx) {
+        int ink = theme.color("onSurface");
+        GradientDrawable wash = new GradientDrawable();
+        wash.setCornerRadius(radiusPx);
+        wash.setColor(Color.argb(36, Color.red(ink), Color.green(ink), Color.blue(ink)));
+        android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
+        states.setEnterFadeDuration(0);
+        states.setExitFadeDuration(0);
+        states.addState(new int[] {android.R.attr.state_pressed}, wash);
+        states.addState(new int[0], new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        return states;
+    }
+
+    /**
+     * The hideable bar, styled after dimatx's kiosk-satellite-navbar. Expanded it
+     * shows one icon per QR code in a rounded indicator, plus a chevron that
+     * collapses it; collapsed it shows the lone chevron handle that brings it
+     * back.
      */
     private final class Bar implements OverlayFactory {
         private final int[] slots;
@@ -432,15 +449,15 @@ public final class QrPlugin implements KioskPlugin {
         public View create(Context context, KsTheme theme) {
             LinearLayout root = new LinearLayout(context);
             root.setOrientation(LinearLayout.HORIZONTAL);
-            root.setGravity(Gravity.CENTER);
+            root.setGravity(Gravity.CENTER_VERTICAL);
             if (expanded) {
                 for (int slot : slots) {
-                    TextView icon = iconView(context, theme, barIcon[slot]);
-                    icon.setTag(slot);
-                    root.addView(icon);
+                    LinearLayout cell = cell(context, barIcon[slot]);
+                    cell.setTag(slot);
+                    root.addView(cell);
                 }
             }
-            TextView chevron = iconView(context, theme, chevron());
+            LinearLayout chevron = cell(context, chevron());
             chevron.setTag("chevron");
             root.addView(chevron);
             root.setOnTouchListener(barTouch(slots));
@@ -448,13 +465,48 @@ public final class QrPlugin implements KioskPlugin {
             return root;
         }
 
+        /** One tappable cell: a rounded indicator with the icon centered in it. */
+        private LinearLayout cell(Context context, String name) {
+            LinearLayout cell = new LinearLayout(context);
+            cell.setOrientation(LinearLayout.HORIZONTAL);
+            cell.setGravity(Gravity.CENTER);
+            android.widget.FrameLayout indicator = new android.widget.FrameLayout(context);
+            android.widget.ImageView icon = new android.widget.ImageView(context);
+            icon.setTag(name);
+            indicator.addView(icon, new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
+            cell.addView(indicator);
+            return cell;
+        }
+
         @Override
         public void onThemeChanged(View view, KsTheme theme) {
             LinearLayout root = (LinearLayout) view;
-            GradientDrawable pill = theme.card();
-            pill.setCornerRadius(theme.px(100));
-            root.setBackground(pill);
-            root.setPadding(theme.px(12), theme.px(6), theme.px(12), theme.px(6));
+            // The navbar's surface and padding: the KS card and a tight inset.
+            root.setBackground(theme.card());
+            root.setPadding(theme.px(8), theme.px(6), theme.px(8), theme.px(6));
+            for (int i = 0; i < root.getChildCount(); i++) {
+                LinearLayout cell = (LinearLayout) root.getChildAt(i);
+                cell.setMinimumWidth(theme.px(48));
+                cell.setMinimumHeight(theme.px(48));
+                cell.setPadding(theme.px(4), theme.px(4), theme.px(4), theme.px(4));
+                cell.setBackground(pressable(theme, theme.px(theme.radiusRow())));
+                android.widget.FrameLayout indicator = (android.widget.FrameLayout) cell.getChildAt(0);
+                GradientDrawable pill = new GradientDrawable();
+                pill.setCornerRadius(theme.px(16));
+                pill.setColor(color(theme, "secondaryContainer", "primaryContainer"));
+                indicator.setBackground(pill);
+                indicator.setLayoutParams(new LinearLayout.LayoutParams(theme.px(44), theme.px(32)));
+                android.widget.ImageView icon = (android.widget.ImageView) indicator.getChildAt(0);
+                LinearLayout.LayoutParams glyph = new LinearLayout.LayoutParams(theme.px(24), theme.px(24));
+                icon.setLayoutParams(glyph);
+                String name = (String) icon.getTag();
+                Drawable glyph2 = icon(theme, name, "onSurfaceVariant");
+                if (glyph2 != null)
+                    glyph2.setTint(color(theme, "onSecondaryContainer", "onSurface"));
+                icon.setImageDrawable(glyph2);
+            }
         }
     }
 

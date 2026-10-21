@@ -4,6 +4,13 @@ A hideable bar of QR code buttons, docked anywhere on the kiosk's frame and
 dragged wherever you want. Every QR encodes a URL, plain text or Wi-Fi
 credentials — whatever a phone needs to scan.
 
+> **Style credit:** the bar's look — the KS card surface, the rounded indicator
+> pills behind the icons, the animation-free pressed feedback and the cell
+> sizing — follows [Navbar for Kiosk Satellite](https://github.com/dimatx/kiosk-satellite-navbar)
+> by **Dima Tokar**, Apache-2.0. Many thanks to Dima for the design; this plugin
+> reimplements that look for the QR bar. See [NOTICE](NOTICE) for the full
+> attribution.
+
 ## What it does
 
 - **The bar** shows one icon per configured QR code, with a chevron at its end.
@@ -69,4 +76,6 @@ its own settings.
 ## License
 
 Apache-2.0. The QR encoder is [Nayuki's QR-Code-generator](https://www.nayuki.io/page/qr-code-generator-library)
-(MIT), bundled under `src/io/nayuki/qrcodegen`.
+(MIT), bundled under `src/io/nayuki/qrcodegen`. The bar's visual style follows
+[Navbar for Kiosk Satellite](https://github.com/dimatx/kiosk-satellite-navbar)
+by Dima Tokar (Apache-2.0), with thanks — see [NOTICE](NOTICE).

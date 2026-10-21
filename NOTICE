@@ -1,0 +1,22 @@
+QR Code for Kiosk Satellite
+Copyright 2026 shin-01
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+Built from the Kiosk Satellite plugin template
+(https://github.com/jxlarrea/kiosk-satellite-plugins), Apache-2.0.
+The SDK sources under sdk/ and the build tools under tools/ come from that
+template.
+
+Kiosk Satellite itself is a separate work by Xavier Larrea under its own license
+and is not part of this repository.
+
+The bar's visual style — the surface, the rounded indicator pills behind the
+icons, the pressed feedback without animation and the sizing of cells and
+glyphs — follows the Navbar for Kiosk Satellite by Dima Tokar
+(https://github.com/dimatx/kiosk-satellite-navbar), Apache-2.0. Many thanks to
+Dima Tokar for the design; this plugin reimplements that look for the QR bar
+without copying its source.
+
+The QR encoder is Nayuki's QR-Code-generator
+(https://www.nayuki.io/page/qr-code-generator-library), MIT, bundled under
+src/io/nayuki/qrcodegen.
