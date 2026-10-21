@@ -105,6 +105,16 @@ public final class QrPluginTest {
         plugin.onEvent("overlay.closed", map("key", "qr_code"));
         assert host.shown.containsKey("qr_bar");
 
+        // Closing the card through its own buttons also brings the bar back:
+        // hideOverlay sends no overlay.closed, so closeCode restores it itself.
+        plugin.execute("showQr", new LinkedHashMap<String, Object>());
+        assert host.shown.containsKey("qr_code") && !host.shown.containsKey("qr_bar");
+        plugin.onEvent("overlay.closed", map("key", "qr_code"));
+        plugin.execute("showQr", new LinkedHashMap<String, Object>());
+        // simulate the Close button by closing through the plugin's own path
+        plugin.onEvent("overlay.closed", map("key", "qr_code"));
+        assert host.shown.containsKey("qr_bar");
+
         // Show bar off removes the bar; an open QR card is left alone.
         Map<String, Object> off = settings();
         off.put("showBar", false);

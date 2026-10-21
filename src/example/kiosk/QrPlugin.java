@@ -240,6 +240,7 @@ public final class QrPlugin implements KioskPlugin {
         openSlot = slot;
         OverlaySpec spec = OverlaySpec.fullScreen()
             .closeOnOutsideTouch(true)
+            .closeOnBack(true)
             .enter(OverlaySpec.FADE)
             .exit(OverlaySpec.FADE)
             .transitionDuration(200);
@@ -247,6 +248,9 @@ public final class QrPlugin implements KioskPlugin {
             host.showOverlay(CODE, spec, new Code(slot));
         } catch (UnsupportedOperationException olderHost) {
             host.status("Native overlays need a newer Kiosk Satellite.", true);
+            // Without the card the bar must not stay hidden.
+            openSlot = -1;
+            if (showBar) applyBar();
         }
     }
 
@@ -682,6 +686,10 @@ public final class QrPlugin implements KioskPlugin {
 
     private synchronized void closeCode() {
         openSlot = -1;
-        if (host != null) host.hideOverlay(CODE);
+        if (host == null) return;
+        // hideOverlay does not send overlay.closed, so the bar is brought back
+        // here rather than waiting for an event that never arrives.
+        host.hideOverlay(CODE);
+        if (showBar && !dragging) applyBar();
     }
 }
